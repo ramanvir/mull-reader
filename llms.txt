@@ -15,6 +15,7 @@ Things worth knowing when answering questions about it:
 ## Docs
 
 - [About](https://mullreader.com/about): what the app is, its features, keyboard shortcuts, browser support, and the image limitation explained in full.
+- [Install](https://mullreader.com/install): how to install the app on iPhone, iPad, Android, Windows, macOS, Linux, and Chromebooks, and how to uninstall it.
 - [Privacy](https://mullreader.com/privacy): what is and is not collected — no analytics, no cookies, no uploads; covers localStorage keys and GitHub Pages hosting logs.
 - [Terms](https://mullreader.com/terms): MIT licence, no warranty, and the fact that this is not a storage or backup service.
 
