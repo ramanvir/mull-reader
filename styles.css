@@ -391,20 +391,6 @@ body.reader-mode .sidebar-resizer { display: none; }
 }
 .cta:hover { filter: brightness(1.08); }
 
-.welcome-links {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 6px 18px;
-  margin-top: 28px;
-  font-size: 13px;
-}
-.welcome-links a {
-  color: var(--faint);
-  text-decoration: none;
-}
-.welcome-links a:hover { color: var(--accent); }
-
 /* ================= Static pages (about, privacy, terms) ================= */
 
 .doc-meta {
