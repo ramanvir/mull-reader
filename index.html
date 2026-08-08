@@ -163,6 +163,12 @@
           <h1>Mull Reader</h1>
           <p class="welcome-sub">A lightweight, open-source markdown reader to consume knowledge created by AI agents. Mobile friendly, and all documents remain local, always. A progressive web app: install it and it works offline.</p>
           <button id="welcome-open-file-btn" class="cta">Open a file</button>
+          <!-- Everything else lives in the menu; the legal pages stay visible
+               here so a first visit can find them without hunting. -->
+          <nav class="welcome-links" aria-label="Legal">
+            <a href="./privacy.html">Privacy</a>
+            <a href="./terms.html">Terms</a>
+          </nav>
         </div>
       </section>
       <article id="content" class="content prose" hidden></article>
