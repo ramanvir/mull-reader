@@ -1,6 +1,6 @@
 // Mull Reader service worker — cache-first app shell for full offline use.
 
-const CACHE = 'mull-v25';
+const CACHE = 'mull-v26';
 
 const ASSETS = [
   './',
@@ -27,14 +27,33 @@ const ASSETS = [
   './favicon.ico',
 ];
 
+// The host 308s the .html URLs to their extensionless forms, so fetching
+// './about.html' yields a response with the redirected flag set. Browsers
+// refuse to accept a redirected response for a navigation request, so a
+// cached one bricks the very link it was saved for. Rewrapping the body in
+// a fresh Response clears the flag.
+async function stripRedirect(response) {
+  if (!response.redirected) return response;
+  const body = await response.blob();
+  return new Response(body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: response.headers,
+  });
+}
+
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    // 'no-cache' revalidates against the server so a new SW version never
-    // fills its cache with stale copies from the HTTP cache.
-    caches.open(CACHE)
-      .then((cache) => cache.addAll(ASSETS.map((u) => new Request(u, { cache: 'no-cache' }))))
-      .then(() => self.skipWaiting())
-  );
+  event.waitUntil((async () => {
+    const cache = await caches.open(CACHE);
+    await Promise.all(ASSETS.map(async (u) => {
+      // 'no-cache' revalidates against the server so a new SW version never
+      // fills its cache with stale copies from the HTTP cache.
+      const response = await fetch(u, { cache: 'no-cache' });
+      if (!response.ok) throw new Error(`precache failed: ${u} (${response.status})`);
+      await cache.put(u, await stripRedirect(response));
+    }));
+    await self.skipWaiting();
+  })());
 });
 
 self.addEventListener('activate', (event) => {
@@ -54,11 +73,17 @@ self.addEventListener('fetch', (event) => {
   event.respondWith((async () => {
     const cached = await caches.match(request, { ignoreSearch: true });
     if (cached) return cached;
+    // The canonical URLs are extensionless; the precache stores the .html
+    // files, so /about, /privacy, and /terms hit the cache too.
+    if (request.mode === 'navigate' && !url.pathname.endsWith('/') && !url.pathname.endsWith('.html')) {
+      const aliased = await caches.match(`${url.pathname}.html`);
+      if (aliased) return aliased;
+    }
     try {
       const response = await fetch(request);
       if (response.ok) {
-        const cache = await caches.open(CACHE);
-        cache.put(request, response.clone());
+        const copy = response.clone();
+        caches.open(CACHE).then(async (cache) => cache.put(request, await stripRedirect(copy)));
       }
       return response;
     } catch (err) {
