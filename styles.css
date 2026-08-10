@@ -330,6 +330,72 @@ body.reader-mode .sidebar-resizer { display: none; }
 
 .main { flex: 1; min-width: 0; }
 
+/* ================= File tree ================= */
+
+.file-tree { margin: 4px 0 14px; }
+.file-tree[hidden] { display: none; }
+
+.tree-root-name {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--faint);
+  padding: 2px 8px 8px;
+  overflow-wrap: anywhere;
+}
+
+.tree-empty { color: var(--faint); font-size: 13px; padding: 8px; }
+
+.tree-children { display: flex; flex-direction: column; }
+.tree-dir > .tree-children,
+details.tree-dir > .tree-children { padding-left: 14px; }
+
+details.tree-dir > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--muted);
+  user-select: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-wrap: anywhere;
+}
+details.tree-dir > summary::-webkit-details-marker { display: none; }
+details.tree-dir > summary::before {
+  content: '';
+  flex: none;
+  width: 0; height: 0;
+  border-left: 5px solid var(--faint);
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  transition: transform 0.12s ease;
+}
+details.tree-dir[open] > summary::before { transform: rotate(90deg); }
+details.tree-dir > summary:hover { background: var(--bg-raised); color: var(--ink-strong); }
+
+.tree-file {
+  text-align: left;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 13.5px;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.tree-file:hover { background: var(--bg-raised); }
+.tree-file.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+
 /* ================= Welcome ================= */
 
 .welcome {
@@ -390,6 +456,16 @@ body.reader-mode .sidebar-resizer { display: none; }
   text-decoration: none;
 }
 .cta:hover { filter: brightness(1.08); }
+
+.cta-secondary {
+  margin-left: 10px;
+  background: none;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  box-shadow: none;
+}
+.cta-secondary:hover { color: var(--ink-strong); border-color: var(--faint); filter: none; }
+.cta-secondary[hidden] { display: none; }
 
 .welcome-links {
   display: flex;

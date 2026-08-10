@@ -144,7 +144,12 @@
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
           Open file
         </button>
+        <button id="open-folder-btn" class="menu-item" title="Open folder (⇧⌘O) — works with Google Drive via Drive for Desktop">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+          Open folder
+        </button>
       </div>
+      <div id="file-tree" class="file-tree" hidden></div>
       <div id="outline" class="outline" hidden aria-label="Table of contents">
         <div class="outline-title">Contents</div>
         <nav id="toc"></nav>
@@ -163,6 +168,7 @@
           <h1>Mull Reader</h1>
           <p class="welcome-sub">A lightweight, open-source markdown reader to consume knowledge created by AI agents. Mobile friendly, and all documents remain local, always. A progressive web app: install it and it works offline.</p>
           <button id="welcome-open-file-btn" class="cta">Open a file</button>
+          <button id="welcome-open-folder-btn" class="cta cta-secondary">Open a folder</button>
           <!-- Everything else lives in the menu; the legal pages stay visible
                here so a first visit can find them without hunting. -->
           <nav class="welcome-links" aria-label="Legal">
@@ -181,6 +187,7 @@
   <div id="toast-root" class="toast-root" aria-live="polite"></div>
   <div id="drop-veil" class="drop-veil" hidden><div>Drop to open</div></div>
 
+  <input type="file" id="dir-fallback-input" webkitdirectory multiple hidden>
   <input type="file" id="file-fallback-input" accept=".md,.markdown,text/markdown" hidden>
 
   <script src="./vendor/marked.min.js"></script>
