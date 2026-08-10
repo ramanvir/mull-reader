@@ -1,10 +1,15 @@
-import { isMarkdownName, readNode } from './fs.js';
+import {
+  supportsFS, isMarkdownName,
+  saveDirHandle, loadDirHandle, clearDirHandle, verifyPermission,
+  buildTree, treeFromFileList, findByPath, firstFile, readNode,
+} from './fs.js';
 import { renderMarkdownInto, buildToc } from './render.js';
 
 const $ = (sel) => document.querySelector(sel);
 
 const els = {
   sidebar: $('#sidebar'),
+  tree: $('#file-tree'),
   welcome: $('#welcome'),
   content: $('#content'),
   outline: $('#outline'),
@@ -12,11 +17,13 @@ const els = {
   fileName: $('#current-file-name'),
   toastRoot: $('#toast-root'),
   dropVeil: $('#drop-veil'),
+  dirInput: $('#dir-fallback-input'),
   fileInput: $('#file-fallback-input'),
 };
 
 // Storage keys keep their original 'folio-' names (the app's former name)
 // so existing users' preferences survive the rename to Mull Reader.
+const LAST_FILE_KEY = 'folio-last-file';
 const THEME_KEY = 'folio-theme';
 const SIDEBAR_KEY = 'folio-sidebar';
 const READER_KEY = 'folio-reader';
@@ -47,6 +54,7 @@ const TONE_LEVELS = [
 ];
 const TONE_NEUTRAL_INDEX = 3;
 
+let tree = null;          // current folder tree (or null)
 let current = null;       // { node, name, lastModified }
 
 // ---------- Toasts ----------
@@ -340,9 +348,74 @@ function updateProgress() {
   el.textContent = `${max > 0 ? Math.min(100, Math.max(0, Math.round((window.scrollY / max) * 100))) : 100}%`;
 }
 
+// ---------- File tree ----------
+
+function renderTree() {
+  els.tree.innerHTML = '';
+  if (!tree) {
+    els.tree.hidden = true;
+    return;
+  }
+  els.tree.hidden = false;
+  if (!tree.children.length) {
+    const empty = document.createElement('div');
+    empty.className = 'tree-empty';
+    empty.textContent = 'No markdown files in this folder.';
+    els.tree.appendChild(empty);
+    return;
+  }
+  const rootLabel = document.createElement('div');
+  rootLabel.className = 'tree-root-name';
+  rootLabel.textContent = tree.name || 'Files';
+  els.tree.appendChild(rootLabel);
+  els.tree.appendChild(renderChildren(tree));
+  highlightCurrentInTree();
+}
+
+function renderChildren(dirNode) {
+  const list = document.createElement('div');
+  list.className = 'tree-children';
+  for (const child of dirNode.children) {
+    if (child.kind === 'dir') {
+      const details = document.createElement('details');
+      details.className = 'tree-dir';
+      details.open = true;
+      const summary = document.createElement('summary');
+      summary.textContent = child.name;
+      details.appendChild(summary);
+      details.appendChild(renderChildren(child));
+      list.appendChild(details);
+    } else {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'tree-file';
+      btn.textContent = child.name.replace(/\.(md|markdown)$/i, '');
+      btn.dataset.path = child.path;
+      btn.addEventListener('click', () => openNode(child));
+      list.appendChild(btn);
+    }
+  }
+  return list;
+}
+
+function highlightCurrentInTree() {
+  const path = current?.node?.path;
+  for (const btn of els.tree.querySelectorAll('.tree-file')) {
+    const active = !!path && btn.dataset.path === path;
+    btn.classList.toggle('active', active);
+    if (active) {
+      let parent = btn.parentElement;
+      while (parent && parent !== els.tree) {
+        if (parent.tagName === 'DETAILS') parent.open = true;
+        parent = parent.parentElement;
+      }
+    }
+  }
+}
+
 // ---------- Welcome / empty states ----------
 
-function showWelcome() {
+function showWelcome(mode = 'default', dirName = '') {
   els.content.hidden = true;
   els.outline.hidden = true;
   els.welcome.hidden = false;
@@ -351,10 +424,28 @@ function showWelcome() {
   updateProgress();
   document.title = 'Mull Reader - Markdown Reader';
   const inner = els.welcome.querySelector('.welcome-inner');
-  inner.querySelector('.welcome-sub').innerHTML = 'A lightweight, open-source markdown reader to consume knowledge created by AI agents. Mobile friendly, and all documents remain local, always. A progressive web app: install it and it works offline.';
   const cta = inner.querySelector('.cta');
-  cta.textContent = 'Open a file';
-  cta.onclick = openFile;
+  const alt = inner.querySelector('.cta-secondary');
+  const sub = inner.querySelector('.welcome-sub');
+  alt.hidden = mode !== 'default';
+  // Each mode owns both the label and the action so they can't drift apart.
+  if (mode === 'reconnect') {
+    sub.innerHTML = `Welcome back. Reconnect to <strong>${escapeHtml(dirName)}</strong> to keep reading.`;
+    cta.textContent = `Reconnect “${dirName}”`;
+    // The caller wires up the reconnect handler.
+  } else if (mode === 'empty-folder') {
+    sub.textContent = 'That folder has no markdown files. Try another one.';
+    cta.textContent = 'Open a folder';
+    cta.onclick = openFolder;
+  } else {
+    sub.innerHTML = 'A lightweight, open-source markdown reader to consume knowledge created by AI agents. Mobile friendly, and all documents remain local, always. A progressive web app: install it and it works offline.';
+    cta.textContent = 'Open a file';
+    cta.onclick = openFile;
+  }
+}
+
+function escapeHtml(s) {
+  return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
 // ---------- Opening files ----------
@@ -368,6 +459,7 @@ async function openNode(node, { keepScroll = false } = {}) {
     return;
   }
   current = { node, name: file.name, lastModified: file.lastModified };
+  if (node.path) localStorage.setItem(LAST_FILE_KEY, node.path);
 
   const scrollY = keepScroll ? window.scrollY : 0;
   els.welcome.hidden = true;
@@ -379,6 +471,7 @@ async function openNode(node, { keepScroll = false } = {}) {
   els.fileName.textContent = file.name;
   els.fileName.title = node.path || file.name;
   document.title = `${file.name} - Mull Reader`;
+  highlightCurrentInTree();
   updateProgress();
 
   // On phones the sidebar is a fixed overlay — tuck it away once a file is picked.
@@ -414,6 +507,89 @@ async function openFile() {
     return;
   }
   await openSingleFile(handle);
+}
+
+// ---------- Opening folders ----------
+// Google Drive needs no special path here: Drive for Desktop mounts Drive as
+// a local folder the picker can browse, and mobile system pickers offer Drive
+// as a source on their own.
+
+async function openFolder() {
+  if (!supportsFS) {
+    els.dirInput.click();
+    return;
+  }
+  let handle;
+  try {
+    handle = await window.showDirectoryPicker({ mode: 'read' });
+  } catch (err) {
+    if (err?.name !== 'AbortError') toast('Couldn’t open that folder.');
+    return;
+  }
+  try {
+    await saveDirHandle(handle);
+  } catch { /* persistence is best-effort */ }
+  await loadFolder(handle);
+}
+
+// The sidebar starts collapsed by default; a freshly opened folder would
+// build its tree into a hidden panel, so surface it (except on phones,
+// where the sidebar is an overlay the reader opens on demand).
+function revealSidebarForTree() {
+  if (!isPhone() && document.body.classList.contains('sidebar-collapsed')) {
+    toggleSidebar();
+  }
+}
+
+async function loadFolder(handle) {
+  try {
+    tree = await buildTree(handle);
+  } catch {
+    toast('Couldn’t read that folder.');
+    return;
+  }
+  renderTree();
+  revealSidebarForTree();
+  const last = findByPath(tree, localStorage.getItem(LAST_FILE_KEY));
+  const target = last || firstFile(tree);
+  if (target) await openNode(target);
+  else showWelcome('empty-folder');
+}
+
+function loadFolderFromFileList(fileList) {
+  tree = treeFromFileList(fileList);
+  renderTree();
+  revealSidebarForTree();
+  const target = firstFile(tree);
+  if (target) openNode(target);
+  else showWelcome('empty-folder');
+}
+
+// ---------- Startup reconnect ----------
+
+async function tryRestore() {
+  if (!supportsFS) return false;
+  const saved = await loadDirHandle();
+  if (!saved) return false;
+  if (await verifyPermission(saved)) {
+    await loadFolder(saved);
+    return true;
+  }
+  // Permission needs a user gesture — offer a reconnect button.
+  showWelcome('reconnect', saved.name);
+  const cta = els.welcome.querySelector('.cta');
+  cta.onclick = async () => {
+    if (await verifyPermission(saved, { ask: true })) {
+      cta.onclick = null;
+      await loadFolder(saved);
+    } else {
+      toast('Permission denied. Pick the folder again.');
+      cta.onclick = null;
+      showWelcome();
+      await clearDirHandle();
+    }
+  };
+  return true;
 }
 
 // ---------- External-edit refresh ----------
@@ -453,7 +629,8 @@ function setupDragDrop() {
       try {
         const handle = await item.getAsFileSystemHandle();
         if (handle?.kind === 'directory') {
-          toast('Drop a single markdown file.');
+          try { await saveDirHandle(handle); } catch { /* best-effort */ }
+          await loadFolder(handle);
           return;
         }
         if (handle?.kind === 'file') {
@@ -569,6 +746,7 @@ function init() {
   $('#tone-inc').addEventListener('click', () => stepTone(1));
   $('#appearance-reset').addEventListener('click', resetAppearance);
   $('#open-file-btn').addEventListener('click', openFile);
+  $('#open-folder-btn').addEventListener('click', openFolder);
   // The topbar file name can truncate on narrow screens — tapping it shows
   // the full name (with its folder path when one is open) as a toast.
   els.fileName.addEventListener('click', () => {
@@ -578,6 +756,11 @@ function init() {
   // so it gets no static listener here.
   $('#welcome-open-file-btn').onclick = openFile;
 
+  $('#welcome-open-folder-btn').addEventListener('click', openFolder);
+  els.dirInput.addEventListener('change', () => {
+    if (els.dirInput.files?.length) loadFolderFromFileList(els.dirInput.files);
+    els.dirInput.value = '';
+  });
   els.fileInput.addEventListener('change', () => {
     if (els.fileInput.files?.[0]) openSingleFile(els.fileInput.files[0]);
     els.fileInput.value = '';
@@ -594,7 +777,7 @@ function init() {
     }
     if (!(e.metaKey || e.ctrlKey)) return;
     const key = e.key.toLowerCase();
-    if (key === 'o') { e.preventDefault(); openFile(); }
+    if (key === 'o') { e.preventDefault(); if (e.shiftKey) openFolder(); else openFile(); }
     else if (key === 'b') { e.preventDefault(); toggleSidebar(); }
   });
 
@@ -614,7 +797,10 @@ function init() {
   setupDragDrop();
   setupTouchReaderBar();
   setupPwa();
-  showWelcome();
+  renderTree();
+  tryRestore().then((restored) => {
+    if (!restored) showWelcome();
+  });
 }
 
 init();
