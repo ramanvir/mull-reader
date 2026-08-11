@@ -28,13 +28,13 @@
   <main class="main">
     <article class="content prose">
       <h1>Privacy</h1>
-      <p class="doc-meta">Last updated 8 August 2026</p>
+      <p class="doc-meta">Last updated 11 August 2026</p>
 
       <p>Mull Reader is a static web page with no backend. There is no account to create, no server to send anything to, and no analytics, tracking, or advertising code of any kind.</p>
 
       <h2>Your documents never leave your device</h2>
       <p>When you open a markdown file, your browser reads it directly from disk using the File System Access API (or a plain file input, on browsers without it). The text is converted to HTML and displayed entirely inside the page. It is never uploaded, copied to a server, or transmitted anywhere.</p>
-      <p>Mull Reader keeps no copy of your documents. Close the tab and the content is gone from memory; nothing is retained.</p>
+      <p>Close the tab and the content is gone from memory. The one case in which the app retains a document — a saved copy on your own device, so a recently read file can be reopened — is set out under <a href="#recent">recent documents</a> below.</p>
 
       <h2>What is stored on your device</h2>
       <p>Your reading preferences are saved in your browser's <code>localStorage</code> so the app looks the same next time. These stay on your device and are readable only by this site:</p>
@@ -43,9 +43,22 @@
         <li>Reader mode</li>
         <li>Text size, brightness, and colour warmth</li>
         <li>Sidebar open state and width</li>
+        <li>The path, within the folder you opened, of the file you were last reading</li>
+        <li>How far through each document you had read — a scroll position per document, so reopening one returns you to it. It is stored as a number and the document's name or path, never any of its text, and the app keeps at most the hundred most recent</li>
       </ul>
+      <p>If you open a folder, your browser also keeps a reference to it in <code>IndexedDB</code> so the app can offer to reconnect to it next time. That reference is a permission handle held by the browser, not a copy of the folder or of anything in it, and reconnecting still requires your permission.</p>
+
+      <h2 id="recent">Recent documents</h2>
+      <p>The app remembers the last eight documents you opened so you can return to one without hunting for it again. What that costs in storage depends on how your browser handed the file over:</p>
+      <ul>
+        <li><strong>On browsers with the File System Access API</strong> (Chrome, Edge, and other Chromium browsers on desktop), the entry holds the file's name and a permission handle — the same kind of reference described above. The document is re-read from disk when you reopen it, so no copy of it is kept.</li>
+        <li><strong>Everywhere else</strong> — Safari, Firefox, and any file that arrives from a cloud provider such as Google Drive or iCloud, from a drag and drop, or from the operating system opening a file with the app — the browser gives the app the file's contents and no way to reach that file again. To make the entry work at all, the document's text is stored in <code>IndexedDB</code> on your device. Documents over roughly one megabyte are skipped rather than stored.</li>
+      </ul>
+      <p>Those saved copies stay in your browser's storage for this site, readable only by this site, and are never sent anywhere. An entry's copy is deleted when it falls off the end of the list, and <em>Clear recent</em> in the sidebar deletes every entry and every saved copy immediately. If you would rather the app kept nothing at all, use Clear recent after reading, or open documents in a private window.</p>
+
+      <h2>The offline cache</h2>
       <p>The app's own files — HTML, CSS, JavaScript, icons — are also stored by a service worker so the app works offline. That cache holds only the app itself, never your documents.</p>
-      <p>You can clear all of it at any time by clearing site data for this site in your browser settings.</p>
+      <p>All of the above — preferences, folder reference, recent documents, and the offline cache — can be removed at any time by clearing site data for this site in your browser settings.</p>
 
       <h2>No cookies</h2>
       <p>Mull Reader does not set cookies and does not use any third-party scripts. The markdown, sanitising, and syntax-highlighting libraries it depends on are bundled with the app and served from the same place, not from a CDN.</p>

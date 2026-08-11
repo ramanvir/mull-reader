@@ -38,10 +38,17 @@
       <h2>Reading</h2>
       <ul>
         <li><strong>Open a file</strong> from the sidebar, the welcome screen, or <kbd>⌘O</kbd> — or drag a <code>.md</code> file anywhere onto the window.</li>
-        <li><strong>Contents sidebar</strong> lists the headings with scroll-spy; <kbd>⌘B</kbd> toggles it, and you can drag its edge to resize.</li>
-        <li><strong>Appearance</strong> controls in the menu step text size, brightness, and colour warmth, all remembered between visits.</li>
+        <li><strong>Open a folder</strong> from the sidebar or <kbd>⇧⌘O</kbd> to browse a whole set of markdown files, and the folder reconnects on your next visit. Dropping a folder onto the window works too.</li>
+        <li><strong>Paste markdown</strong> straight from the clipboard — useful on a phone, where copying a document out of a cloud app beats hunting for it through a file picker.</li>
+        <li><strong>Recent documents</strong> in the sidebar and on the welcome screen hold the last eight things you read, so getting back to one is a tap rather than another trip through the picker. See the <a href="./privacy.html#recent">privacy page</a> for what that stores.</li>
+        <li><strong>Contents sidebar</strong> lists the headings with scroll-spy, above them the file tree when a folder is open; <kbd>⌘B</kbd> toggles it, and you can drag its edge to resize.</li>
+        <li><strong>Settings panel</strong> slides in from the right with text size, brightness, and colour warmth, all remembered between visits. It stays open while you try things and closes when you touch anything outside it.</li>
         <li><strong>Reader mode</strong> hides everything but the page, with a reading progress percentage. <kbd>Esc</kbd> exits.</li>
         <li><strong>E-ink mode</strong> switches to pure grayscale with no shadows or motion, for e-ink displays.</li>
+        <li><strong>Compact spacing</strong> tightens the gaps between paragraphs, headings, and list items — agent-written markdown is mostly lists, and at full editorial spacing that turns into a lot of scrolling.</li>
+        <li><strong>Find in document</strong> — the magnifier in the top bar, or <kbd>⌘F</kbd>, searches the open document; <kbd>↵</kbd> and <kbd>⇧↵</kbd> move between matches and <kbd>Esc</kbd> closes it. Installed on iOS the app has no browser find bar of its own, so this is the way to search a document on a phone.</li>
+        <li><strong>Reading position</strong> is remembered for each document, so reopening one puts you back where you stopped rather than at the top.</li>
+        <li><strong>Auto-resume</strong> reopens the last document you were reading when the app starts, wherever a folder can't be reconnected on its own — like an e-reader opening the book you were in.</li>
         <li><strong>Live refresh</strong> re-reads the open file whenever the window regains focus, so edits from an agent still writing show up on their own.</li>
       </ul>
 
@@ -52,13 +59,15 @@
       <p>Images that point at a web address (<code>https://…</code>) or that are embedded directly in the file as data URIs display normally. Images stored <em>next to</em> your markdown file — the common <code>![diagram](./diagram.png)</code> form — will not display. Browsers only grant a web page access to the exact file you picked, not to its neighbours, so there is no way for the app to reach them. If you need images to travel with a document, embed them in the file or host them online.</p>
 
       <h2>Browser support</h2>
-      <p>Fully featured in Chrome and Edge. Firefox and Safari fall back to a standard file picker and cannot open a file by double-clicking it, but reading, rendering, themes, and offline support all work the same.</p>
+      <p>Fully featured in Chrome and Edge. Firefox and Safari fall back to standard file and folder pickers, cannot reconnect to a folder automatically, and cannot open a file by double-clicking it, but reading, rendering, themes, and offline support all work the same.</p>
 
       <h2>Keyboard shortcuts</h2>
       <ul>
         <li><kbd>⌘O</kbd> / <kbd>Ctrl+O</kbd> — open a file</li>
+        <li><kbd>⇧⌘O</kbd> / <kbd>Shift+Ctrl+O</kbd> — open a folder</li>
         <li><kbd>⌘B</kbd> / <kbd>Ctrl+B</kbd> — toggle the contents sidebar</li>
-        <li><kbd>Esc</kbd> — leave reader mode, or close the menu</li>
+        <li><kbd>⌘F</kbd> / <kbd>Ctrl+F</kbd> — find in the open document</li>
+        <li><kbd>Esc</kbd> — close the search bar, leave reader mode, or close the settings panel</li>
       </ul>
 
       <h2>Open source</h2>

@@ -9,6 +9,7 @@
     const theme = localStorage.getItem('folio-theme');
     if (theme === 'light' || theme === 'dark') root.dataset.theme = theme;
     if (localStorage.getItem('folio-eink') === 'on') root.setAttribute('data-eink', '');
+    if (localStorage.getItem('folio-compact') === 'on') root.setAttribute('data-compact', '');
 
     // Mirrors PROSE_SIZES / DEFAULT_SIZE_INDEX in js/app.js.
     const sizes = [14.5, 16, 17.5, 19, 21, 23.5, 26, 29, 32];

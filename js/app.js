@@ -1,10 +1,20 @@
-import { isMarkdownName, readNode } from './fs.js';
+import {
+  supportsFS, isMarkdownName,
+  saveDirHandle, loadDirHandle, clearDirHandle, verifyPermission,
+  buildTree, treeFromFileList, findByPath, firstFile, readNode,
+  loadRecents, recordRecent, readRecentText, forgetRecent, clearRecents, MAX_RECENTS,
+} from './fs.js';
 import { renderMarkdownInto, buildToc } from './render.js';
 
 const $ = (sel) => document.querySelector(sel);
 
 const els = {
   sidebar: $('#sidebar'),
+  tree: $('#file-tree'),
+  recents: $('#recents'),
+  recentsList: $('#recents-list'),
+  welcomeRecents: $('#welcome-recents'),
+  welcomeRecentsList: $('#welcome-recents-list'),
   welcome: $('#welcome'),
   content: $('#content'),
   outline: $('#outline'),
@@ -12,18 +22,26 @@ const els = {
   fileName: $('#current-file-name'),
   toastRoot: $('#toast-root'),
   dropVeil: $('#drop-veil'),
+  dirInput: $('#dir-fallback-input'),
   fileInput: $('#file-fallback-input'),
+  searchBar: $('#search-bar'),
+  searchInput: $('#search-input'),
+  searchCount: $('#search-count'),
+  searchToggle: $('#search-toggle'),
 };
 
 // Storage keys keep their original 'folio-' names (the app's former name)
 // so existing users' preferences survive the rename to Mull Reader.
+const LAST_FILE_KEY = 'folio-last-file';
 const THEME_KEY = 'folio-theme';
 const SIDEBAR_KEY = 'folio-sidebar';
 const READER_KEY = 'folio-reader';
 const EINK_KEY = 'folio-eink';
+const COMPACT_KEY = 'folio-compact';
 const TEXT_SIZE_KEY = 'folio-text-size';
 const DIM_KEY = 'folio-brightness';
 const SIDEBAR_W_KEY = 'folio-sidebar-w';
+const POSITIONS_KEY = 'folio-positions';
 
 const PROSE_SIZES = [14.5, 16, 17.5, 19, 21, 23.5, 26, 29, 32];
 const DEFAULT_SIZE_INDEX = 2;
@@ -47,7 +65,9 @@ const TONE_LEVELS = [
 ];
 const TONE_NEUTRAL_INDEX = 3;
 
+let tree = null;          // current folder tree (or null)
 let current = null;       // { node, name, lastModified }
+let recents = [];         // most-recently-read documents, newest first
 
 // ---------- Toasts ----------
 
@@ -109,6 +129,21 @@ function applyEink() {
 function toggleEink() {
   localStorage.setItem(EINK_KEY, localStorage.getItem(EINK_KEY) === 'on' ? 'off' : 'on');
   applyEink();
+}
+
+// ---------- Compact spacing ----------
+
+function applyCompact() {
+  const on = localStorage.getItem(COMPACT_KEY) === 'on';
+  document.documentElement.toggleAttribute('data-compact', on);
+  $('#compact-toggle').setAttribute('aria-pressed', String(on));
+  // The page just got shorter or taller, so the reading percentage moved.
+  updateProgress();
+}
+
+function toggleCompact() {
+  localStorage.setItem(COMPACT_KEY, localStorage.getItem(COMPACT_KEY) === 'on' ? 'off' : 'on');
+  applyCompact();
 }
 
 // ---------- Text size ----------
@@ -210,9 +245,13 @@ const SIDEBAR_W_MIN = 170;
 const SIDEBAR_W_MAX = 560;
 const SIDEBAR_KEY_STEP = 16;     // arrow-key nudge
 
-// Never let the sidebar squeeze the page below a readable column.
+// Never let the sidebar squeeze the page below a readable column — except on
+// phones, where it floats over the page rather than beside it, so there is no
+// column to protect. Reserving 320px there pinned it to its minimum on every
+// phone and left the stylesheet's 84vw cap unreachable.
 function clampSidebarWidth(px) {
-  const max = Math.max(SIDEBAR_W_MIN, Math.min(SIDEBAR_W_MAX, window.innerWidth - 320));
+  const room = isPhone() ? SIDEBAR_W_MAX : window.innerWidth - 320;
+  const max = Math.max(SIDEBAR_W_MIN, Math.min(SIDEBAR_W_MAX, room));
   return Math.round(Math.min(Math.max(px, SIDEBAR_W_MIN), max));
 }
 
@@ -329,54 +368,517 @@ function updateProgress() {
   el.textContent = `${max > 0 ? Math.min(100, Math.max(0, Math.round((window.scrollY / max) * 100))) : 100}%`;
 }
 
+// ---------- Reading position ----------
+// Where you stopped reading each document, so reopening one puts you back
+// there instead of at the top — the thing a Kindle does that a browser doesn't.
+//
+// Stored as a fraction of the scrollable height rather than a pixel offset:
+// text size, compact spacing, and window width all change how tall a document
+// is, and a fraction lands in roughly the right place through any of them.
+// Identity is the same one recents uses — the path inside an open folder, or
+// the document's name when there is no path (pasted text, a single file).
+
+const MAX_POSITIONS = 100;
+// Within a hair of either end isn't a place worth returning to: the top is
+// where a document opens anyway, and the bottom means it was finished.
+const POSITION_EDGE = 0.02;
+const POSITION_DEBOUNCE = 500;
+
+let pendingPosition = null;   // { key, fraction } captured at scroll time
+let positionTimer = null;
+
+const docKey = (node) => node.path || node.name || '';
+
+function readPositions() {
+  try {
+    const map = JSON.parse(localStorage.getItem(POSITIONS_KEY));
+    return map && typeof map === 'object' && !Array.isArray(map) ? map : {};
+  } catch {
+    return {};
+  }
+}
+
+function scrollFraction() {
+  const max = document.documentElement.scrollHeight - window.innerHeight;
+  return max > 0 ? Math.min(1, Math.max(0, window.scrollY / max)) : 0;
+}
+
+// The key and the fraction are captured now, not at flush time: opening
+// another document between the scroll and the write would otherwise file this
+// position under the wrong name.
+function schedulePositionSave() {
+  if (!current || els.content.hidden) return;
+  pendingPosition = { key: docKey(current.node), fraction: scrollFraction() };
+  clearTimeout(positionTimer);
+  positionTimer = setTimeout(flushPosition, POSITION_DEBOUNCE);
+}
+
+function flushPosition() {
+  clearTimeout(positionTimer);
+  positionTimer = null;
+  const pending = pendingPosition;
+  pendingPosition = null;
+  if (!pending?.key) return;
+
+  const map = readPositions();
+  if (pending.fraction < POSITION_EDGE || pending.fraction > 1 - POSITION_EDGE) {
+    if (!(pending.key in map)) return;
+    delete map[pending.key];
+  } else {
+    map[pending.key] = { f: Math.round(pending.fraction * 1e4) / 1e4, ts: Date.now() };
+    const keys = Object.keys(map);
+    if (keys.length > MAX_POSITIONS) {
+      // Least-recently-saved entries fall off the end.
+      keys.sort((a, b) => (map[b]?.ts || 0) - (map[a]?.ts || 0));
+      for (const key of keys.slice(MAX_POSITIONS)) delete map[key];
+    }
+  }
+  try {
+    localStorage.setItem(POSITIONS_KEY, JSON.stringify(map));
+  } catch { /* private mode or quota — reading is unaffected */ }
+}
+
+function savedFraction(node) {
+  const entry = readPositions()[docKey(node)];
+  const f = entry?.f;
+  return typeof f === 'number' && f > 0 && f < 1 ? f : null;
+}
+
+// An explicit #fragment — a contents link, or a shared link into a section —
+// says where to go, and outranks anything remembered.
+function hashTarget() {
+  const id = location.hash.slice(1);
+  if (!id) return null;
+  try {
+    return els.content.querySelector(`#${CSS.escape(decodeURIComponent(id))}`);
+  } catch {
+    return null;
+  }
+}
+
+// ---------- Find in document ----------
+// Installed on iOS the app runs without any browser chrome, so there is no
+// find bar to fall back on: this is the only way to search a document there.
+//
+// Matches are painted with the CSS Custom Highlight API, which colours ranges
+// without touching the DOM — no wrapper spans to insert, and none to unpick
+// afterwards. Where it doesn't exist (older WebKit) the matches are still
+// counted and scrolled to; the app never rewrites the document to fake it.
+
+const SEARCH_DEBOUNCE = 150;
+// A search across a very long document is linear work per keystroke; past this
+// many hits the count stops being useful anyway.
+const SEARCH_CAP = 5000;
+const supportsHighlights = typeof CSS !== 'undefined' && !!CSS.highlights && typeof Highlight === 'function';
+
+let searchMatches = [];   // Ranges into #content, in document order
+let searchAt = -1;        // index of the current match, -1 when there is none
+let searchTimer = null;
+
+const searchIsOpen = () => !els.searchBar.hidden;
+
+function clearHighlights() {
+  if (!supportsHighlights) return;
+  CSS.highlights.delete('search');
+  CSS.highlights.delete('search-current');
+}
+
+function paintHighlights() {
+  if (!supportsHighlights) return;
+  if (!searchMatches.length) {
+    clearHighlights();
+    return;
+  }
+  CSS.highlights.set('search', new Highlight(...searchMatches));
+  const currentRange = searchMatches[searchAt];
+  if (currentRange) {
+    const one = new Highlight(currentRange);
+    // Both highlights cover the current match; the current one paints on top.
+    one.priority = 1;
+    CSS.highlights.set('search-current', one);
+  } else {
+    CSS.highlights.delete('search-current');
+  }
+}
+
+// Case-insensitive substring match over the rendered text, one text node at a
+// time. Code blocks are included on purpose — a command or an identifier is
+// exactly the kind of thing people come back to a document looking for.
+// A match has to sit inside a single text node, so a phrase that straddles
+// markup (**bold** in the middle of it, or two syntax-highlighted tokens)
+// isn't found. Stitching text nodes together to catch those would cost a
+// second index of the whole document on every keystroke, for a case nobody
+// searches for.
+function collectMatches(query) {
+  const found = [];
+  const needle = query.toLowerCase();
+  if (!needle) return found;
+  const walker = document.createTreeWalker(els.content, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    const hay = node.nodeValue.toLowerCase();
+    let from = hay.indexOf(needle);
+    while (from >= 0) {
+      const range = document.createRange();
+      range.setStart(node, from);
+      range.setEnd(node, from + needle.length);
+      found.push(range);
+      if (found.length >= SEARCH_CAP) return found;
+      from = hay.indexOf(needle, from + needle.length);
+    }
+  }
+  return found;
+}
+
+function updateSearchCount() {
+  const total = searchMatches.length;
+  els.searchCount.textContent = total ? `${searchAt + 1}/${total}` : '0';
+  els.searchCount.classList.toggle('none', total === 0);
+  els.searchCount.hidden = !els.searchInput.value;
+  $('#search-prev').disabled = total === 0;
+  $('#search-next').disabled = total === 0;
+}
+
+// Puts the match in the middle of the page. The range's own rectangle is used
+// rather than its element's, so a hit deep inside a long paragraph still
+// centres on the words themselves.
+function revealMatch() {
+  const range = searchMatches[searchAt];
+  if (!range) return;
+  const rect = range.getBoundingClientRect();
+  if (rect.height || rect.width) {
+    window.scrollTo(0, Math.max(0, window.scrollY + rect.top - (window.innerHeight / 2)));
+  } else {
+    range.startContainer.parentElement?.scrollIntoView({ block: 'center' });
+  }
+}
+
+function stepMatch(delta) {
+  if (!searchMatches.length) return;
+  searchAt = (searchAt + delta + searchMatches.length) % searchMatches.length;
+  paintHighlights();
+  updateSearchCount();
+  revealMatch();
+}
+
+// `keepAt` holds the current match across a re-run (an external-edit refresh),
+// so a document rewritten under you doesn't throw away where you were looking.
+function runSearch({ keepAt = false } = {}) {
+  const previous = searchAt;
+  clearHighlights();
+  searchMatches = els.content.hidden ? [] : collectMatches(els.searchInput.value.trim());
+  if (!searchMatches.length) {
+    searchAt = -1;
+    updateSearchCount();
+    return;
+  }
+  // Start from whatever is already on screen rather than from the top, so
+  // typing a word finds the next one rather than sending you back to page one.
+  if (keepAt && previous >= 0) {
+    searchAt = Math.min(previous, searchMatches.length - 1);
+  } else {
+    searchAt = searchMatches.findIndex((r) => r.getBoundingClientRect().bottom > 0);
+    if (searchAt < 0) searchAt = 0;
+  }
+  paintHighlights();
+  updateSearchCount();
+  revealMatch();
+}
+
+function openSearch() {
+  if (els.content.hidden) return;
+  els.searchBar.hidden = false;
+  document.body.classList.add('search-open');
+  els.searchToggle.setAttribute('aria-expanded', 'true');
+  updateSearchCount();
+  els.searchInput.focus();
+  els.searchInput.select();
+  if (els.searchInput.value.trim()) runSearch();
+}
+
+function closeSearch() {
+  clearTimeout(searchTimer);
+  searchTimer = null;
+  clearHighlights();
+  searchMatches = [];
+  searchAt = -1;
+  els.searchInput.value = '';
+  els.searchCount.textContent = '';
+  els.searchBar.hidden = true;
+  document.body.classList.remove('search-open');
+  els.searchToggle.setAttribute('aria-expanded', 'false');
+}
+
+function setupSearch() {
+  els.searchToggle.addEventListener('click', () => {
+    if (searchIsOpen()) closeSearch();
+    else openSearch();
+  });
+  $('#search-close').addEventListener('click', closeSearch);
+  $('#search-prev').addEventListener('click', () => stepMatch(-1));
+  $('#search-next').addEventListener('click', () => stepMatch(1));
+  els.searchInput.addEventListener('input', () => {
+    clearTimeout(searchTimer);
+    // The handle is cleared as it fires, so Enter below can tell "still
+    // waiting to search" from "search already ran".
+    searchTimer = setTimeout(() => { searchTimer = null; runSearch(); }, SEARCH_DEBOUNCE);
+  });
+  els.searchInput.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    // Enter before the debounce has fired should search what's typed now.
+    if (searchTimer) {
+      clearTimeout(searchTimer);
+      searchTimer = null;
+      runSearch();
+      return;
+    }
+    stepMatch(e.shiftKey ? -1 : 1);
+  });
+}
+
+// ---------- File tree ----------
+
+function renderTree() {
+  els.tree.innerHTML = '';
+  // Opening or closing a folder changes whether the recents list should be
+  // expanded, so the two stay in step.
+  renderRecents();
+  // With no folder open the tree is hidden outright — the sidebar still has
+  // the open actions and the document contents to show.
+  els.tree.hidden = !tree;
+  if (!tree) return;
+  if (!tree.children.length) {
+    const empty = document.createElement('div');
+    empty.className = 'tree-empty';
+    empty.textContent = 'No markdown files in this folder.';
+    els.tree.appendChild(empty);
+    return;
+  }
+  const rootLabel = document.createElement('div');
+  rootLabel.className = 'tree-root-name';
+  rootLabel.textContent = tree.name || 'Files';
+  els.tree.appendChild(rootLabel);
+  els.tree.appendChild(renderChildren(tree));
+  highlightCurrentInTree();
+}
+
+function renderChildren(dirNode) {
+  const list = document.createElement('div');
+  list.className = 'tree-children';
+  for (const child of dirNode.children) {
+    if (child.kind === 'dir') {
+      const details = document.createElement('details');
+      details.className = 'tree-dir';
+      details.open = true;
+      const summary = document.createElement('summary');
+      summary.textContent = child.name;
+      details.appendChild(summary);
+      details.appendChild(renderChildren(child));
+      list.appendChild(details);
+    } else {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'tree-file';
+      btn.textContent = child.name.replace(/\.(md|markdown)$/i, '');
+      btn.dataset.path = child.path;
+      btn.addEventListener('click', () => openNode(child));
+      list.appendChild(btn);
+    }
+  }
+  return list;
+}
+
+function highlightCurrentInTree() {
+  const path = current?.node?.path;
+  for (const btn of els.tree.querySelectorAll('.tree-file')) {
+    const active = !!path && btn.dataset.path === path;
+    btn.classList.toggle('active', active);
+    if (active) {
+      let parent = btn.parentElement;
+      while (parent && parent !== els.tree) {
+        if (parent.tagName === 'DETAILS') parent.open = true;
+        parent = parent.parentElement;
+      }
+    }
+  }
+}
+
+// ---------- Recent documents ----------
+
+// Two lists, one source: the sidebar's (for while you're reading) and the
+// welcome screen's (for a returning reader who has no folder open, which is
+// every launch on browsers without persistent file handles).
+// Tracks what the disclosure was last opened/closed *for*, so re-rendering the
+// list (which happens on every document opened) doesn't keep overriding a
+// reader who collapsed it by hand.
+let recentsOpenFor = null;
+
+function renderRecents() {
+  const has = recents.length > 0;
+  els.recents.hidden = !has;
+  els.welcomeRecents.hidden = !has;
+  // A folder tree is the better way around its own files, so the sidebar list
+  // folds away when one opens and comes back when it closes.
+  const openFor = tree ? 'tree' : 'no-tree';
+  if (recentsOpenFor !== openFor) {
+    recentsOpenFor = openFor;
+    els.recents.open = !tree;
+  }
+  fillRecents(els.recentsList);
+  fillRecents(els.welcomeRecentsList);
+}
+
+function fillRecents(listEl) {
+  listEl.innerHTML = '';
+  for (const entry of recents) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'recent-item';
+    btn.title = entry.dirName ? `${entry.dirName}/${entry.path}` : entry.path || entry.name;
+
+    const name = document.createElement('span');
+    name.className = 'recent-name';
+    name.textContent = entry.name.replace(/\.(md|markdown)$/i, '');
+    btn.appendChild(name);
+
+    // Say where it will come back from — the folder it lives in, or, for a
+    // file the browser can't hand back, the copy this app kept.
+    const meta = document.createElement('span');
+    meta.className = 'recent-meta';
+    meta.textContent = entry.dirName || (entry.handle ? 'Opened directly' : 'Saved copy');
+    btn.appendChild(meta);
+
+    btn.addEventListener('click', () => openRecent(entry));
+    listEl.appendChild(btn);
+  }
+}
+
+async function openRecent(entry) {
+  if (entry.handle) {
+    // The click is the user gesture a permission prompt needs. Files reached
+    // through a folder are already covered by that folder's grant.
+    if (!(await verifyPermission(entry.handle, { ask: true }))) {
+      toast(`Permission denied for “${entry.name}”.`);
+      return;
+    }
+    // A file that's been moved or deleted since can't be opened again, and a
+    // row that leads nowhere is worse than no row — drop it.
+    if (!(await openNode({ name: entry.name, path: entry.path, kind: 'file', handle: entry.handle }))) {
+      recents = await forgetRecent(entry.id);
+      renderRecents();
+    }
+    return;
+  }
+  const text = await readRecentText(entry.id);
+  if (typeof text !== 'string') {
+    toast(`“${entry.name}” is no longer saved. Open it again.`);
+    recents = await forgetRecent(entry.id);
+    renderRecents();
+    return;
+  }
+  await openNode({ name: entry.name, path: entry.path, kind: 'file', text, lastModified: entry.ts });
+}
+
 // ---------- Welcome / empty states ----------
 
-function showWelcome() {
+function showWelcome(mode = 'default', dirName = '') {
+  if (searchIsOpen()) closeSearch();
   els.content.hidden = true;
   els.outline.hidden = true;
+  els.searchToggle.hidden = true;
   els.welcome.hidden = false;
   els.fileName.textContent = '';
   els.fileName.removeAttribute('title');
   updateProgress();
   document.title = 'Mull Reader - Markdown Reader';
   const inner = els.welcome.querySelector('.welcome-inner');
-  inner.querySelector('.welcome-sub').innerHTML = 'A lightweight, open-source markdown reader to consume knowledge created by AI agents. Mobile friendly, and all documents remain local, always. A progressive web app: install it and it works offline.';
   const cta = inner.querySelector('.cta');
-  cta.textContent = 'Open a file';
-  cta.onclick = openFile;
+  const sub = inner.querySelector('.welcome-sub');
+  // Each mode owns both the label and the action so they can't drift apart.
+  if (mode === 'reconnect') {
+    sub.innerHTML = `Welcome back. Reconnect to <strong>${escapeHtml(dirName)}</strong> to keep reading.`;
+    cta.textContent = `Reconnect “${dirName}”`;
+    // The caller wires up the reconnect handler.
+  } else if (mode === 'empty-folder') {
+    sub.textContent = 'That folder has no markdown files. Try another one.';
+    cta.textContent = 'Open a folder';
+    cta.onclick = openFolder;
+  } else {
+    sub.innerHTML = 'A lightweight, open-source markdown reader to consume knowledge created by AI agents. Mobile friendly, and all documents remain local, always. A progressive web app: install it and it works offline.';
+    cta.textContent = 'Open a file';
+    cta.onclick = openFile;
+  }
+}
+
+function escapeHtml(s) {
+  return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
 // ---------- Opening files ----------
 
+// Resolves true once the document is on screen, false if it couldn't be read —
+// the recents list uses that to drop entries that no longer lead anywhere.
 async function openNode(node, { keepScroll = false } = {}) {
   let file, text;
   try {
     ({ file, text } = await readNode(node));
   } catch {
     toast(`Couldn't read “${node.name}”`);
-    return;
+    return false;
   }
+  // Anything still owed to the outgoing document is written before `current`
+  // moves on, since the pending save was filed under its key.
+  flushPosition();
+  // The old document's ranges point into markup that is about to be replaced.
+  clearHighlights();
   current = { node, name: file.name, lastModified: file.lastModified };
+  if (node.path) localStorage.setItem(LAST_FILE_KEY, node.path);
 
   const scrollY = keepScroll ? window.scrollY : 0;
+  const resumeAt = keepScroll ? null : savedFraction(node);
   els.welcome.hidden = true;
   els.content.hidden = false;
+  els.searchToggle.hidden = false;
   const headings = renderMarkdownInto(els.content, text);
   buildToc(els.toc, els.outline, headings);
-  window.scrollTo(0, scrollY);
+  // One scroll, set synchronously now that the document is laid out — reading
+  // scrollHeight flushes layout, so the fraction lands against the real height
+  // rather than the previous document's. Anything later would fight the
+  // browser's own scroll restoration.
+  const anchor = keepScroll ? null : hashTarget();
+  if (anchor) anchor.scrollIntoView();
+  else if (resumeAt !== null) {
+    const max = document.documentElement.scrollHeight - window.innerHeight;
+    window.scrollTo(0, Math.max(0, Math.round(resumeAt * max)));
+  } else {
+    window.scrollTo(0, scrollY);
+  }
+
+  // A refresh of the same document keeps the search running over the new text;
+  // a different document closes it, since the query belonged to the old one.
+  if (keepScroll) { if (searchIsOpen()) runSearch({ keepAt: true }); }
+  else if (searchIsOpen()) closeSearch();
 
   els.fileName.textContent = file.name;
   els.fileName.title = node.path || file.name;
   document.title = `${file.name} - Mull Reader`;
+  highlightCurrentInTree();
   updateProgress();
+
+  // Recording is storage work the reader shouldn't wait on, and a failure to
+  // remember a document should never stop it from being displayed.
+  recordRecent(node, { dirName: tree?.name || '', text })
+    .then((list) => { recents = list; renderRecents(); })
+    .catch(() => { /* recents stay as they are */ });
 
   // On phones the sidebar is a fixed overlay — tuck it away once a file is picked.
   if (isPhone() && !document.body.classList.contains('sidebar-collapsed')) {
     toggleSidebar();
   }
+  return true;
 }
 
-// A single file from drop / file-handler / fallback input.
+// A single file from drop / file-handler / fallback input (not part of a tree).
 async function openSingleFile(fileOrHandle) {
   const node = fileOrHandle instanceof File
     ? { name: fileOrHandle.name, path: '', kind: 'file', file: fileOrHandle }
@@ -388,8 +890,25 @@ async function openSingleFile(fileOrHandle) {
   await openNode(node);
 }
 
+// iOS (and iPadOS, which reports itself as a Mac with a touch screen) resolves
+// an `accept` list to UTIs and hides everything that doesn't match. Files served
+// by the Google Drive and iCloud providers frequently carry a generic UTI, so
+// any filter at all can leave a folder of markdown greyed out and unpickable.
+// An unfiltered picker is noisier but always openable; isMarkdownName() in
+// openSingleFile() still decides what the app will actually read.
+const isIos = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+// Installed from the Home Screen, the app runs in its own WebKit container.
+// A file input there reaches the Files app and nothing else — the Google Drive
+// entry seen in Chrome for iOS is Chrome's own native integration, and no web
+// API can summon it. Both facts are worth telling the reader once, in place.
+const isStandalone = window.navigator.standalone === true ||
+  matchMedia('(display-mode: standalone)').matches;
+
 async function openFile() {
   if (!('showOpenFilePicker' in window)) {
+    if (isIos) els.fileInput.removeAttribute('accept');
     els.fileInput.click();
     return;
   }
@@ -403,6 +922,175 @@ async function openFile() {
     return;
   }
   await openSingleFile(handle);
+}
+
+// Several files picked in one go. Reaching a cloud folder through the iOS
+// Files app is slow enough that a multi-select is worth treating as a small
+// reading list rather than as one file plus discards: the whole selection goes
+// into recents — which caches their text, the only way back to a file the
+// browser won't hand over a second time — and the sidebar lists them.
+async function openFileSelection(files) {
+  const markdown = files.filter((f) => isMarkdownName(f.name));
+  if (!markdown.length) {
+    toast('No markdown files in that selection.');
+    return;
+  }
+  tree = treeFromFileList(markdown);
+  renderTree();
+  revealSidebar();
+
+  // Recorded before the first file is opened so that one ends up on top.
+  const first = firstFile(tree);
+  for (const file of markdown.slice(0, MAX_RECENTS)) {
+    if (file === first?.file) continue;
+    try {
+      recents = await recordRecent(
+        { name: file.name, path: file.name, kind: 'file', file },
+        { text: await file.text() },
+      );
+    } catch { /* unreadable, or too big to cache — it's still in the sidebar */ }
+  }
+  if (first) await openNode(first);
+  renderRecents();
+}
+
+// ---------- Pasted markdown ----------
+
+// A second way in that never touches a file picker: copy a document in the
+// Drive app (or anywhere else) and paste it here. Pasted text has no file
+// behind it, so recents keeps it the same way it keeps any other handle-less
+// document — which means it survives a reload.
+function openPastedText(text) {
+  const heading = text.match(/^#{1,6}[ \t]+(.+?)[ \t]*#*$/m);
+  const name = (heading?.[1] || 'Pasted note').trim().replace(/[\\/:*?"<>|]/g, '').slice(0, 60);
+  return openNode({ name: `${name || 'Pasted note'}.md`, path: '', kind: 'file', text });
+}
+
+async function pasteFromClipboard() {
+  if (!navigator.clipboard?.readText) {
+    toast('Copy some markdown, then paste it into this page.');
+    return;
+  }
+  let text;
+  try {
+    text = await navigator.clipboard.readText();
+  } catch {
+    toast('Clipboard access was denied.');
+    return;
+  }
+  if (!text?.trim()) {
+    toast('There’s no text on the clipboard.');
+    return;
+  }
+  await openPastedText(text);
+}
+
+// ---------- Opening folders ----------
+
+async function openFolder() {
+  if (!supportsFS) {
+    els.dirInput.click();
+    return;
+  }
+  let handle;
+  try {
+    handle = await window.showDirectoryPicker({ mode: 'read' });
+  } catch (err) {
+    if (err?.name !== 'AbortError') toast('Couldn’t open that folder.');
+    return;
+  }
+  try {
+    await saveDirHandle(handle);
+  } catch { /* persistence is best-effort */ }
+  await loadFolder(handle);
+  revealSidebar();
+}
+
+async function loadFolder(handle) {
+  try {
+    tree = await buildTree(handle);
+  } catch {
+    toast('Couldn’t read that folder.');
+    return;
+  }
+  renderTree();
+  const last = findByPath(tree, localStorage.getItem(LAST_FILE_KEY));
+  const target = last || firstFile(tree);
+  if (target) await openNode(target);
+  else showWelcome('empty-folder');
+}
+
+// A folder is only useful with its tree in view, so an explicit open (picker,
+// drop, fallback input) pops the sidebar out. Startup reconnect deliberately
+// doesn't, so the collapsed-by-default preference still holds on load.
+function revealSidebar() {
+  if (!isPhone() && document.body.classList.contains('sidebar-collapsed')) toggleSidebar();
+}
+
+function loadFolderFromFileList(fileList) {
+  tree = treeFromFileList(fileList);
+  renderTree();
+  revealSidebar();
+  const target = firstFile(tree);
+  if (target) openNode(target);
+  else showWelcome('empty-folder');
+}
+
+// ---------- Startup reconnect ----------
+
+async function tryRestore() {
+  if (!supportsFS) return false;
+  const saved = await loadDirHandle();
+  if (!saved) return false;
+  if (await verifyPermission(saved)) {
+    await loadFolder(saved);
+    return true;
+  }
+  // Permission needs a user gesture — offer a reconnect button.
+  showWelcome('reconnect', saved.name);
+  const cta = els.welcome.querySelector('.cta');
+  cta.onclick = async () => {
+    if (await verifyPermission(saved, { ask: true })) {
+      cta.onclick = null;
+      await loadFolder(saved);
+    } else {
+      toast('Permission denied. Pick the folder again.');
+      cta.onclick = null;
+      showWelcome();
+      await clearDirHandle();
+    }
+  };
+  return true;
+}
+
+// ---------- Startup auto-resume ----------
+// Where no folder can be reconnected — every launch on Safari and Firefox, and
+// on Chromium when no folder was ever opened — landing on the welcome screen
+// makes a reader dig their document out again. Reopen the newest recent
+// instead, the way an e-reader opens the book you were in.
+//
+// Only if it can be done without asking for anything: this runs on load, with
+// no user gesture behind it, and a permission prompt there either fails
+// outright or reads as the app grabbing at files on its own.
+//
+// A failure here never prunes the entry: a document that can't be opened
+// unattended — a folder whose permission has lapsed, say — is still perfectly
+// openable from the list with a click behind it. Entries are dropped only when
+// a reader clicks one and it leads nowhere.
+async function resumeLastDocument() {
+  const entry = recents[0];
+  if (!entry) return false;
+  try {
+    if (entry.handle) {
+      if (!(await verifyPermission(entry.handle, { ask: false }))) return false;
+      return await openNode({ name: entry.name, path: entry.path, kind: 'file', handle: entry.handle });
+    }
+    const text = await readRecentText(entry.id);
+    if (typeof text !== 'string') return false;
+    return await openNode({ name: entry.name, path: entry.path, kind: 'file', text, lastModified: entry.ts });
+  } catch {
+    return false;
+  }
 }
 
 // ---------- External-edit refresh ----------
@@ -442,7 +1130,9 @@ function setupDragDrop() {
       try {
         const handle = await item.getAsFileSystemHandle();
         if (handle?.kind === 'directory') {
-          toast('Drop a single markdown file.');
+          try { await saveDirHandle(handle); } catch { /* best-effort */ }
+          await loadFolder(handle);
+          revealSidebar();
           return;
         }
         if (handle?.kind === 'file') {
@@ -506,6 +1196,7 @@ function setupPwa() {
 
 function init() {
   applyEink();
+  applyCompact();
   applySidebarState();
   applyReaderState();
   applyTextSize();
@@ -518,21 +1209,43 @@ function init() {
 
   const menu = $('#app-menu');
   const menuToggle = $('#menu-toggle');
+  const menuScrim = $('#menu-scrim');
+  const menuIsOpen = () => document.body.classList.contains('menu-open');
+  // Where focus should land when the panel closes. Held from open time rather
+  // than read at close time, because dismissing by tapping the scrim blurs to
+  // <body> before the handler runs.
+  let menuReturnFocus = null;
   const setMenu = (open) => {
-    menu.hidden = !open;
+    if (open === menuIsOpen()) return;
+    document.body.classList.toggle('menu-open', open);
     menuToggle.setAttribute('aria-expanded', String(open));
+    if (open) {
+      menuReturnFocus = document.activeElement;
+      // The panel is `visibility: hidden` until the class lands, and a hidden
+      // element silently refuses focus, so read layout to flush the change.
+      menu.getBoundingClientRect();
+      menu.focus();
+    } else {
+      menuReturnFocus?.focus?.();
+      menuReturnFocus = null;
+    }
   };
-  menuToggle.addEventListener('click', () => setMenu(menu.hidden));
+  menuToggle.addEventListener('click', () => setMenu(!menuIsOpen()));
+  $('#menu-close').addEventListener('click', () => setMenu(false));
+  // The scrim spans the whole page while the panel is open, so anything the
+  // reader touches outside the panel — the topbar included — lands here.
+  menuScrim.addEventListener('click', () => setMenu(false));
   menu.addEventListener('click', (e) => {
-    // The size steppers stay open for repeated taps; any other choice closes the menu.
-    if (e.target.closest('button, a') && !e.target.closest('#font-dec, #font-inc, #dim-dec, #dim-inc, #tone-dec, #tone-inc, #appearance-reset')) setMenu(false);
-  });
-  document.addEventListener('click', (e) => {
-    if (!menu.hidden && !e.target.closest('.menu-wrap')) setMenu(false);
+    // A settings panel should stay put while you try things out, so the
+    // appearance controls all leave it open. Only the two things that take you
+    // out of it close it: reader mode, whose whole point is hiding the chrome,
+    // and the links that navigate away.
+    if (e.target.closest('#reader-toggle, a')) setMenu(false);
   });
 
   $('#theme-toggle').addEventListener('click', toggleTheme);
   $('#eink-toggle').addEventListener('click', toggleEink);
+  $('#compact-toggle').addEventListener('click', toggleCompact);
   $('#reader-toggle').addEventListener('click', toggleReader);
   $('#sidebar-toggle').addEventListener('click', toggleSidebar);
   // Tapping a contents link should tuck the phone overlay away so the reader
@@ -558,6 +1271,12 @@ function init() {
   $('#tone-inc').addEventListener('click', () => stepTone(1));
   $('#appearance-reset').addEventListener('click', resetAppearance);
   $('#open-file-btn').addEventListener('click', openFile);
+  $('#open-folder-btn').addEventListener('click', openFolder);
+  $('#recents-clear').addEventListener('click', async () => {
+    recents = await clearRecents();
+    renderRecents();
+    toast('Recent documents cleared.');
+  });
   // The topbar file name can truncate on narrow screens — tapping it shows
   // the full name (with its folder path when one is open) as a toast.
   els.fileName.addEventListener('click', () => {
@@ -566,15 +1285,45 @@ function init() {
   // The welcome CTA's label and action are owned by showWelcome() per mode,
   // so it gets no static listener here.
   $('#welcome-open-file-btn').onclick = openFile;
+  // Where picking a file means a slow trip through the Files app, pasting is
+  // the faster door — so put it on the welcome screen rather than behind the
+  // sidebar, which starts collapsed on a phone anyway.
+  const welcomePaste = $('#welcome-paste-btn');
+  welcomePaste.hidden = !(isIos || !supportsFS);
+  welcomePaste.onclick = pasteFromClipboard;
+  $('#welcome-hint').hidden = !(isIos && isStandalone);
 
+  els.dirInput.addEventListener('change', () => {
+    if (els.dirInput.files?.length) loadFolderFromFileList(els.dirInput.files);
+    els.dirInput.value = '';
+  });
   els.fileInput.addEventListener('change', () => {
-    if (els.fileInput.files?.[0]) openSingleFile(els.fileInput.files[0]);
+    const files = [...(els.fileInput.files || [])];
     els.fileInput.value = '';
+    if (files.length === 1) openSingleFile(files[0]);
+    else if (files.length > 1) openFileSelection(files);
+  });
+
+  $('#paste-btn').addEventListener('click', pasteFromClipboard);
+  // Pasting anywhere on the page opens the clipboard as a document, so a
+  // hardware keyboard doesn't need the menu. Fields keep their own paste.
+  document.addEventListener('paste', (e) => {
+    if (e.target.closest?.('input, textarea, [contenteditable]')) return;
+    const text = e.clipboardData?.getData('text/plain');
+    if (!text?.trim()) return;
+    e.preventDefault();
+    openPastedText(text);
   });
 
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && !menu.hidden) {
+    if (e.key === 'Escape' && menuIsOpen()) {
       setMenu(false);
+      return;
+    }
+    // Before reader mode: Esc while searching should put the search away,
+    // not throw you out of the page you were reading.
+    if (e.key === 'Escape' && searchIsOpen()) {
+      closeSearch();
       return;
     }
     if (e.key === 'Escape' && document.body.classList.contains('reader-mode')) {
@@ -583,8 +1332,11 @@ function init() {
     }
     if (!(e.metaKey || e.ctrlKey)) return;
     const key = e.key.toLowerCase();
-    if (key === 'o') { e.preventDefault(); openFile(); }
+    if (key === 'o') { e.preventDefault(); if (e.shiftKey) openFolder(); else openFile(); }
     else if (key === 'b') { e.preventDefault(); toggleSidebar(); }
+    // Only claim ⌘F when there's a document to search — on the welcome screen
+    // the browser's own find bar is the more useful thing to leave alone.
+    else if (key === 'f' && !els.content.hidden) { e.preventDefault(); openSearch(); }
   });
 
   window.addEventListener('focus', refreshCurrent);
@@ -593,6 +1345,13 @@ function init() {
   });
 
   window.addEventListener('scroll', () => requestAnimationFrame(updateProgress), { passive: true });
+  window.addEventListener('scroll', schedulePositionSave, { passive: true });
+  // A phone can be closed, swiped away, or backgrounded without ever firing
+  // unload, so the debounce is flushed on the events that do arrive.
+  window.addEventListener('pagehide', flushPosition);
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) flushPosition();
+  });
   window.addEventListener('resize', () => {
     updateProgress();
     // A shrinking window can push the stored width past its cap; re-clamp
@@ -602,8 +1361,22 @@ function init() {
 
   setupDragDrop();
   setupTouchReaderBar();
+  setupSearch();
   setupPwa();
-  showWelcome();
+  renderTree();
+  // The recents list is useful even while a folder reconnects, so it loads
+  // alongside rather than after.
+  const recentsReady = loadRecents()
+    .then((list) => { recents = list; renderRecents(); })
+    .catch(() => {});
+  tryRestore().then(async (restored) => {
+    if (restored) return;
+    // No folder came back, so the way back into a document is the recents
+    // list. Reopen the newest one if that can be done unattended; the welcome
+    // screen is what's left when it can't, never a blank page.
+    await recentsReady;
+    if (!(await resumeLastDocument())) showWelcome();
+  });
 }
 
 init();

@@ -195,6 +195,9 @@ a { -webkit-tap-highlight-color: transparent; }
 #font-inc { font-size: 15.5px; }
 
 .icon-btn:disabled { opacity: 0.35; cursor: default; }
+/* `hidden` has to win over the flex display above — the search button is
+   hidden until a document is open. */
+.icon-btn[hidden] { display: none !important; }
 .icon-btn[aria-pressed="true"] {
   color: var(--accent);
   background: var(--accent-soft);
@@ -205,23 +208,79 @@ a { -webkit-tap-highlight-color: transparent; }
   background: var(--bg-raised);
 }
 
-/* --- overflow menu --- */
+/* --- settings panel --- */
 
-.menu-wrap { position: relative; }
+/* A full-height panel on the right rather than a dropdown. It sits under the
+   brightness and tone veils on purpose, so adjusting them shows their real
+   effect on the page instead of on a panel floating above it. */
 
-.menu {
-  position: absolute;
-  top: calc(100% + 8px);
-  right: 0;
-  z-index: 30;
-  min-width: 208px;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.18);
-  padding: 6px;
+.menu-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 29;
+  background: rgba(0, 0, 0, 0.28);
+  opacity: 0;
+  /* Inert rather than removed, so the fade survives the close. */
+  pointer-events: none;
+  transition: opacity 0.22s ease;
 }
-.menu[hidden] { display: none; }
+body.menu-open .menu-scrim { opacity: 1; pointer-events: auto; }
+
+@media (prefers-reduced-motion: reduce) {
+  .menu-scrim, .menu-panel { transition: none; }
+}
+
+.menu-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 30;
+  width: min(320px, 86vw);
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-sidebar);
+  border-left: 1px solid var(--border);
+  box-shadow: -12px 0 34px rgba(0, 0, 0, 0.16);
+  /* Off-screen and out of the tab order until opened. `visibility` is stepped
+     rather than transitioned: on close it's delayed so the slide-out stays
+     visible, but on open it must flip in the same style recalc — a visibility
+     *transition* leaves the panel hidden for a frame, and a hidden element
+     silently refuses focus(). */
+  transform: translateX(100%);
+  visibility: hidden;
+  transition: transform 0.22s ease, visibility 0s linear 0.22s;
+}
+.menu-panel:focus { outline: none; }
+body.menu-open .menu-panel {
+  transform: none;
+  visibility: visible;
+  transition: transform 0.22s ease, visibility 0s;
+}
+
+.menu-panel-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  height: var(--topbar-h);
+  padding: var(--safe-top) calc(10px + var(--safe-right)) 0 16px;
+  border-bottom: 1px solid var(--border);
+}
+.menu-panel-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--faint);
+}
+
+.menu-panel-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px 10px calc(24px + var(--safe-bottom));
+}
 
 .menu-item {
   display: flex;
@@ -270,6 +329,70 @@ a { -webkit-tap-highlight-color: transparent; }
 :root[data-theme="dark"] .moon { display: block; }
 :root[data-theme="light"] .sun { display: block; }
 :root[data-theme="light"] .moon { display: none; }
+
+/* ================= Find in document ================= */
+
+/* A slim bar under the topbar rather than a floating box: an installed iOS
+   app has no browser find bar, so this is the whole search affordance and it
+   has to be thumb-reachable and wide enough to type into on a phone. */
+.search-bar {
+  position: fixed;
+  top: var(--topbar-h);
+  left: 0;
+  right: 0;
+  z-index: 19;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px calc(10px + var(--safe-right)) 6px calc(12px + var(--safe-left));
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  font-family: var(--sans);
+}
+.search-bar[hidden] { display: none !important; }
+.search-glyph { flex: none; color: var(--faint); }
+
+.search-input {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid transparent;
+  background: none;
+  color: var(--ink);
+  font-family: var(--sans);
+  /* 16px keeps iOS Safari from zooming the page when the field takes focus. */
+  font-size: 16px;
+  padding: 6px 4px;
+  border-radius: 8px;
+}
+.search-input:focus { outline: none; }
+.search-input::placeholder { color: var(--faint); }
+
+.search-count {
+  flex: none;
+  font-size: 12px;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+  padding: 0 4px;
+}
+.search-count.none { color: var(--accent); }
+
+/* In reader mode the topbar hides itself and would slide back over the search
+   bar on hover or a scroll up. Searching is chrome work, so while the bar is
+   open the topbar simply stays put above it. */
+body.reader-mode.search-open .topbar { transform: none; }
+
+/* Highlighting uses the CSS Custom Highlight API, so nothing in the document
+   is rewritten to show a match — see js/app.js. Browsers without it still
+   count and scroll to matches, just without the paint. */
+::highlight(search) {
+  background-color: color-mix(in srgb, var(--accent) 26%, transparent);
+  color: var(--ink-strong);
+}
+::highlight(search-current) {
+  background-color: var(--accent);
+  color: var(--bg);
+}
 
 /* ================= Layout ================= */
 
@@ -329,6 +452,177 @@ body.sidebar-collapsed .sidebar-resizer,
 body.reader-mode .sidebar-resizer { display: none; }
 
 .main { flex: 1; min-width: 0; }
+
+/* ================= File tree ================= */
+
+/* Sits between the open actions and the contents outline. Hidden entirely
+   until a folder is open, so single-file readers never see an empty shelf. */
+.file-tree {
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.file-tree[hidden] { display: none !important; }
+
+.tree-root-name {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--faint);
+  padding: 2px 8px 8px;
+  overflow-wrap: anywhere;
+}
+
+.tree-empty { color: var(--faint); font-size: 13px; padding: 8px; }
+
+.tree-children { display: flex; flex-direction: column; }
+.tree-dir > .tree-children,
+details.tree-dir > .tree-children { padding-left: 14px; }
+
+details.tree-dir > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--muted);
+  user-select: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-wrap: anywhere;
+}
+details.tree-dir > summary::-webkit-details-marker { display: none; }
+details.tree-dir > summary::before {
+  content: '';
+  flex: none;
+  width: 0; height: 0;
+  border-left: 5px solid var(--faint);
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  transition: transform 0.12s ease;
+}
+details.tree-dir[open] > summary::before { transform: rotate(90deg); }
+details.tree-dir > summary:hover { background: var(--bg-raised); color: var(--ink-strong); }
+
+.tree-file {
+  text-align: left;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 13.5px;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.tree-file:hover { background: var(--bg-raised); }
+.tree-file.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* ================= Recent documents ================= */
+
+/* Sits above the file tree: the way back into what you were reading when no
+   folder is open, which on browsers without persistent handles is every launch. */
+.recents {
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.recents[hidden] { display: none !important; }
+
+.recents > summary {
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--faint);
+  padding: 2px 8px 8px;
+}
+.recents > summary::-webkit-details-marker { display: none; }
+.recents > summary::before {
+  content: '';
+  flex: none;
+  width: 0; height: 0;
+  border-left: 5px solid var(--faint);
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  transition: transform 0.12s ease;
+}
+.recents[open] > summary::before { transform: rotate(90deg); }
+.recents > summary:hover { color: var(--ink-strong); }
+
+.recents-list { display: flex; flex-direction: column; }
+
+.recent-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  text-align: left;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  padding: 5px 8px;
+  border-radius: 6px;
+  overflow-wrap: anywhere;
+}
+.recent-item:hover { background: var(--bg-raised); }
+
+.recent-name {
+  font-size: 13.5px;
+  color: var(--ink);
+}
+.recent-meta {
+  font-size: 11px;
+  color: var(--faint);
+}
+
+.recents-clear {
+  margin-top: 6px;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  color: var(--faint);
+}
+.recents-clear:hover { background: var(--bg-raised); color: var(--ink-strong); }
+
+/* The welcome screen's copy of the list. Centred to sit under the CTA, and
+   boxed so it reads as a shelf rather than as more body copy. */
+.welcome-recents {
+  margin-top: 30px;
+  text-align: left;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px;
+  background: var(--bg-raised);
+}
+.welcome-recents[hidden] { display: none !important; }
+
+.welcome-recents-title {
+  font-family: var(--sans);
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--faint);
+  padding: 2px 8px 6px;
+}
+.welcome-recents .recent-item { width: 100%; }
 
 /* ================= Welcome ================= */
 
@@ -390,6 +684,37 @@ body.reader-mode .sidebar-resizer { display: none; }
   text-decoration: none;
 }
 .cta:hover { filter: brightness(1.08); }
+
+.welcome-secondary {
+  display: block;
+  margin: 12px auto 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  font-size: 13.5px;
+  color: var(--muted);
+  text-decoration: underline;
+  text-decoration-color: var(--border);
+  text-underline-offset: 3px;
+  padding: 6px 10px;
+  border-radius: 8px;
+}
+.welcome-secondary:hover { color: var(--accent); }
+.welcome-secondary[hidden] { display: none !important; }
+
+.welcome-hint {
+  margin: 16px auto 0;
+  max-width: 24rem;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--faint);
+  text-align: left;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.welcome-hint strong { color: var(--muted); font-weight: 600; }
+.welcome-hint[hidden] { display: none !important; }
 
 .welcome-links {
   display: flex;
@@ -467,6 +792,40 @@ kbd {
 .prose > :first-child { margin-top: 0; }
 
 .prose h1 + *, .prose h2 + *, .prose h3 + *, .prose h4 + * { margin-top: 0.7em; }
+
+/* ---------- Compact spacing ---------- */
+/* Agent-written markdown is mostly headings and lists, and at the default
+   editorial rhythm that becomes a page of gaps you scroll past. This tightens
+   the space *between* blocks; the text itself is left alone. */
+
+:root[data-compact] .prose { line-height: 1.55; }
+:root[data-compact] .prose > * + * { margin-top: 0.6em; }
+:root[data-compact] .prose > h1 { margin-top: 0.2em; }
+:root[data-compact] .prose > h2 { margin-top: 1.1em; }
+:root[data-compact] .prose > h3 { margin-top: 0.95em; }
+:root[data-compact] .prose > h4 { margin-top: 0.85em; }
+:root[data-compact] .prose h1 + *,
+:root[data-compact] .prose h2 + *,
+:root[data-compact] .prose h3 + *,
+:root[data-compact] .prose h4 + * { margin-top: 0.4em; }
+
+:root[data-compact] .prose li { margin-top: 0.1em; }
+:root[data-compact] .prose li > ul,
+:root[data-compact] .prose li > ol { margin-top: 0.1em; }
+
+/* A blank line between list items makes marked wrap each one in a <p>, which
+   then carries the browser's default 1em above and below. Agents write lists
+   that way constantly, so this is the single biggest source of dead space. */
+:root[data-compact] .prose li > p,
+:root[data-compact] .prose blockquote > p { margin: 0; }
+:root[data-compact] .prose li > p + p { margin-top: 0.4em; }
+
+:root[data-compact] .prose blockquote { padding: 0.5em 1.1em; }
+:root[data-compact] .prose blockquote > * + * { margin-top: 0.45em; }
+
+:root[data-compact] .prose hr { margin: 1.2em auto; }
+:root[data-compact] .prose th,
+:root[data-compact] .prose td { padding: 0.4em 0.8em; }
 
 .h-anchor {
   position: absolute;
