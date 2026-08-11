@@ -157,7 +157,19 @@
         </a>
         <a class="menu-item" href="./about.html" title="About Mull Reader">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><path d="M12 7.75v.5"/></svg>
-          About &amp; privacy
+          About
+        </a>
+        <a class="menu-item" href="./install.html" title="Install as an app on your device">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 19h16"/></svg>
+          Install app
+        </a>
+        <a class="menu-item" href="./privacy.html" title="Privacy policy">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 3v5c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6z"/></svg>
+          Privacy
+        </a>
+        <a class="menu-item" href="./terms.html" title="Terms of use">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 13h6"/><path d="M9 17h6"/></svg>
+          Terms
         </a>
     </div>
   </aside>
@@ -169,7 +181,7 @@
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
           Open file
         </button>
-        <button id="open-folder-btn" class="menu-item" title="Open folder (⇧⌘O)">
+        <button id="open-folder-btn" class="menu-item" title="Open folder (⇧⌘O) — works with Google Drive via Drive for Desktop">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
           Open folder
         </button>
@@ -202,6 +214,7 @@
           <h1>Mull Reader</h1>
           <p class="welcome-sub">A lightweight, open-source markdown reader to consume knowledge created by AI agents. Mobile friendly, and all documents remain local, always. A progressive web app: install it and it works offline.</p>
           <button id="welcome-open-file-btn" class="cta">Open a file</button>
+          <button id="welcome-open-folder-btn" class="cta cta-secondary">Open a folder</button>
           <!-- Shown only where the file picker is the painful way in: js/app.js
                reveals these on iOS, and the hint only inside an installed app,
                where the picker can reach nothing but the Files app. -->
@@ -217,9 +230,9 @@
             <div class="welcome-recents-title">Recent</div>
             <div id="welcome-recents-list" class="recents-list"></div>
           </section>
-          <nav class="welcome-links" aria-label="About this app">
-            <a href="https://github.com/ramanvir/mull-reader" target="_blank" rel="noopener noreferrer">GitHub</a>
-            <a href="./about.html">About</a>
+          <!-- Everything else lives in the menu; the legal pages stay visible
+               here so a first visit can find them without hunting. -->
+          <nav class="welcome-links" aria-label="Legal">
             <a href="./privacy.html">Privacy</a>
             <a href="./terms.html">Terms</a>
           </nav>

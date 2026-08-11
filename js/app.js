@@ -112,6 +112,13 @@ function applyTheme() {
 }
 
 function toggleTheme() {
+  // The e-ink palette wins over both themes, so switching while it's on
+  // would change nothing visible. Leave e-ink so the switch always shows.
+  if (document.documentElement.hasAttribute('data-eink')) {
+    localStorage.setItem(EINK_KEY, 'off');
+    applyEink();
+    toast('E-ink mode off');
+  }
   localStorage.setItem(THEME_KEY, effectiveTheme() === 'dark' ? 'light' : 'dark');
   applyTheme();
 }
@@ -127,8 +134,12 @@ function applyEink() {
 }
 
 function toggleEink() {
-  localStorage.setItem(EINK_KEY, localStorage.getItem(EINK_KEY) === 'on' ? 'off' : 'on');
+  const on = localStorage.getItem(EINK_KEY) !== 'on';
+  localStorage.setItem(EINK_KEY, on ? 'on' : 'off');
   applyEink();
+  // In the light theme the e-ink palette is a near-invisible change on a
+  // normal screen, so say out loud that the toggle took effect.
+  toast(on ? 'E-ink mode on' : 'E-ink mode off');
 }
 
 // ---------- Compact spacing ----------
@@ -794,6 +805,9 @@ function showWelcome(mode = 'default', dirName = '') {
   const inner = els.welcome.querySelector('.welcome-inner');
   const cta = inner.querySelector('.cta');
   const sub = inner.querySelector('.welcome-sub');
+  // The secondary folder CTA only belongs to the default state — reconnect and
+  // empty-folder already put a folder action in the primary button.
+  inner.querySelector('.cta-secondary').hidden = mode !== 'default';
   // Each mode owns both the label and the action so they can't drift apart.
   if (mode === 'reconnect') {
     sub.innerHTML = `Welcome back. Reconnect to <strong>${escapeHtml(dirName)}</strong> to keep reading.`;
@@ -1285,6 +1299,7 @@ function init() {
   // The welcome CTA's label and action are owned by showWelcome() per mode,
   // so it gets no static listener here.
   $('#welcome-open-file-btn').onclick = openFile;
+  $('#welcome-open-folder-btn').addEventListener('click', openFolder);
   // Where picking a file means a slow trip through the Files app, pasting is
   // the faster door — so put it on the welcome screen rather than behind the
   // sidebar, which starts collapsed on a phone anyway.

@@ -685,6 +685,16 @@ details.tree-dir > summary:hover { background: var(--bg-raised); color: var(--in
 }
 .cta:hover { filter: brightness(1.08); }
 
+.cta-secondary {
+  margin-left: 10px;
+  background: none;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  box-shadow: none;
+}
+.cta-secondary:hover { color: var(--ink-strong); border-color: var(--faint); filter: none; }
+.cta-secondary[hidden] { display: none; }
+
 .welcome-secondary {
   display: block;
   margin: 12px auto 0;

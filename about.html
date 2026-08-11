@@ -29,7 +29,7 @@
     <article class="content prose">
       <h1>About Mull Reader</h1>
 
-      <p>Mull Reader is a lightweight, open-source markdown reader built to consume knowledge created by AI agents. It installs as a progressive web app, works offline, and has no build step and no frameworks behind it.</p>
+      <p>Mull Reader is a lightweight, open-source markdown reader built to consume knowledge created by AI agents. It <a href="./install.html">installs as a progressive web app</a>, works offline, and has no build step and no frameworks behind it.</p>
 
       <p>The challenge is no longer the availability of knowledge — agents produce it faster than anyone can keep up with. The challenge is <em>understanding</em> it, and understanding cannot be outsourced. Agents share what they know in markdown files, and we read on whatever is at hand: a phone in a queue, a tablet on the couch, a desktop at work. This is a reading environment for exactly that — a place to mull things over.</p>
 
@@ -58,6 +58,9 @@
       <h3>A note about images</h3>
       <p>Images that point at a web address (<code>https://…</code>) or that are embedded directly in the file as data URIs display normally. Images stored <em>next to</em> your markdown file — the common <code>![diagram](./diagram.png)</code> form — will not display. Browsers only grant a web page access to the exact file you picked, not to its neighbours, so there is no way for the app to reach them. If you need images to travel with a document, embed them in the file or host them online.</p>
 
+      <h2>Google Drive and other cloud folders</h2>
+      <p>Documents stay local, so there is no cloud account to connect — instead, cloud storage works through your device. With <a href="https://workspace.google.com/products/drive/#download" target="_blank" rel="noopener noreferrer">Google Drive for Desktop</a> (or the OneDrive, Dropbox, and iCloud equivalents), your Drive appears as an ordinary folder that <em>Open folder</em> can browse like any other, edits syncing in the background. On phones and tablets, the system file picker offers Drive as a source when the Drive app is installed, so <em>Open a file</em> reaches it there. Nothing is uploaded either way; the app just reads what your device shows it.</p>
+
       <h2>Browser support</h2>
       <p>Fully featured in Chrome and Edge. Firefox and Safari fall back to standard file and folder pickers, cannot reconnect to a folder automatically, and cannot open a file by double-clicking it, but reading, rendering, themes, and offline support all work the same.</p>
 
@@ -75,6 +78,7 @@
 
       <nav class="doc-nav" aria-label="Related pages">
         <a href="./">Back to the reader</a>
+        <a href="./install.html">Install</a>
         <a href="./privacy.html">Privacy</a>
         <a href="./terms.html">Terms</a>
       </nav>
