@@ -19,6 +19,10 @@ AI agents share what they know in markdown files, and we read on whatever is at 
 - **File tree** in the sidebar showing only markdown files, with the current file highlighted; it appears once a folder is open and sits above the contents outline
 - **Recent documents** — the last twelve files read, in the sidebar and on the welcome screen. Where the File System Access API exists an entry stores only the file handle and re-reads from disk; where it doesn't (Safari, Firefox, anything arriving from Google Drive or iCloud on iOS) the browser gives no way back to the file, so the text is cached in IndexedDB instead. Documents over ~1 MB are skipped, and *Clear recent* removes every entry and cached copy
 - **Paste markdown** from the clipboard — a sidebar action, or just paste anywhere on the page. Pasted documents are named from their first heading and kept in recents
+- **Live checklists** — round, thumb-sized checkboxes where the whole task row is the tap target; long labels wrap hanging-indent style beside the circle. A tick is written into the markdown source: in Chrome and Edge it's saved straight back to the file (one-time permission prompt), elsewhere it's kept with the document in recents, and a topbar save button / `⌘S` exports an updated copy. The nth checkbox on screen maps to the nth task marker in the source with fenced code skipped; if the counts ever disagree the boxes go read-only rather than risk ticking the wrong line
+- **Checklist view tools** — a strip above a document's first checklist with a done-count, *Hide completed*, and *Completed last*. Both are view-only (CSS hiding and ordering — the file's own order is never rewritten) and remembered per document
+- **Edit any document** — a pencil in the topbar, or `⌘E`, flips between the rendered page and the raw markdown in a plain source editor; `Esc` returns. Edits save exactly like ticks: back to the file where the browser allows it, into recents everywhere, exported on demand
+- **Rename** — tap the document's name in the topbar. A file-backed document is renamed on disk (`FileSystemHandle.move()`, Chromium) or not at all, so the display name never lies about the file; notes and pasted documents rename their recents entry, and the saved reading position follows the new name
 - **Multi-select** — picking several files at once builds a session file tree from them and remembers them all, so one trip through a slow mobile file picker keeps paying off
 - **Contents sidebar** (h2/h3) on the left with scroll-spy and hover anchor links on headings; it starts closed and `⌘B` brings it in, with the choice persisted. On phones it's a slide-over panel that tucks away when you pick a file and closes when you tap outside it
 - **Resizable sidebar** — drag the edge between the sidebar and the page (or focus it and use ←/→); double-click resets it. The width is persisted and applied before first paint
@@ -38,7 +42,7 @@ AI agents share what they know in markdown files, and we read on whatever is at 
 - **Drag & drop** a `.md` file (or a whole folder) anywhere on the window
 - **Full offline support** — cache-first service worker that refreshes itself automatically when a new version deploys
 - **File handler** — when installed, double-clicking a `.md` file can open it directly in Mull Reader (Chromium)
-- Keyboard: `⌘/Ctrl+O` open file, `⇧⌘/Ctrl+O` open folder, `⌘/Ctrl+B` toggle sidebar, `⌘/Ctrl+F` find in document
+- Keyboard: `⌘/Ctrl+O` open file, `⇧⌘/Ctrl+O` open folder, `⌘/Ctrl+B` toggle sidebar, `⌘/Ctrl+F` find in document, `⌘/Ctrl+E` edit, `⌘/Ctrl+S` save
 
 ## Images
 
@@ -83,7 +87,7 @@ manifest.json   PWA manifest (standalone, file handler)
 
 ## Contributing
 
-Issues and pull requests are welcome. Keep the spirit of the project: no build step, no frameworks, no telemetry, and documents never leave the machine.
+Issues and pull requests are welcome — and if you'd like the app to do something it doesn't, [request a feature](https://github.com/ramanvir/mull-reader/issues/new?template=feature_request.yml); a sentence is plenty. Keep the spirit of the project: no build step, no frameworks, no telemetry, and documents never leave the machine.
 
 ## License
 
