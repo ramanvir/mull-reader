@@ -28,6 +28,7 @@ const els = {
   searchInput: $('#search-input'),
   searchCount: $('#search-count'),
   searchToggle: $('#search-toggle'),
+  saveBtn: $('#save-btn'),
 };
 
 // Storage keys keep their original 'folio-' names (the app's former name)
@@ -66,8 +67,10 @@ const TONE_LEVELS = [
 const TONE_NEUTRAL_INDEX = 3;
 
 let tree = null;          // current folder tree (or null)
-let current = null;       // { node, name, lastModified }
+let current = null;       // { node, name, lastModified, text }
 let recents = [];         // most-recently-read documents, newest first
+let docDirty = false;     // checkbox edits not yet written to the file
+let writeDeclined = false; // write permission refused — stop re-asking per tick
 
 // ---------- Toasts ----------
 
@@ -797,6 +800,7 @@ function showWelcome(mode = 'default', dirName = '') {
   els.content.hidden = true;
   els.outline.hidden = true;
   els.searchToggle.hidden = true;
+  els.saveBtn.hidden = true;
   els.welcome.hidden = false;
   els.fileName.textContent = '';
   els.fileName.removeAttribute('title');
@@ -828,6 +832,125 @@ function escapeHtml(s) {
   return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
+// ---------- Editable checklists ----------
+// The one edit the reader supports: ticking a task-list checkbox. A tick is
+// written into the markdown source held in memory and cached in recents, so
+// it survives a reload even in browsers that can't write files. Where the
+// browser hands out writable handles (Chrome, Edge) it is also saved straight
+// back to the file after a one-time permission prompt; elsewhere the topbar
+// save button exports an updated copy.
+
+const TASK_LINE_RE = /^(\s*(?:>\s*)*(?:[-*+]|\d{1,9}[.)])\s+\[)([ xX])(\])(?=[ \t])/;
+
+// Line numbers of every task marker, skipping fenced code blocks where a
+// task-looking line is just text.
+function scanTaskLines(text) {
+  const lines = text.split('\n');
+  const found = [];
+  let fence = null;
+  for (let i = 0; i < lines.length; i++) {
+    const open = lines[i].match(/^\s{0,3}(`{3,}|~{3,})/);
+    if (open) {
+      if (!fence) fence = open[1];
+      else if (open[1][0] === fence[0] && open[1].length >= fence.length) fence = null;
+      continue;
+    }
+    if (fence) continue;
+    if (TASK_LINE_RE.test(lines[i])) found.push(i);
+  }
+  return found;
+}
+
+function wireTaskCheckboxes() {
+  const boxes = [...els.content.querySelectorAll('input[type="checkbox"]')];
+  if (!boxes.length) return;
+  const taskLines = scanTaskLines(current.text);
+  // The nth checkbox on screen is the nth task marker in the source. If the
+  // counts disagree — a task-looking line in indented code, or checkbox HTML
+  // written straight into the markdown — the mapping is unsafe, so the boxes
+  // stay read-only rather than risk ticking the wrong line.
+  if (taskLines.length !== boxes.length) return;
+  boxes.forEach((box, i) => {
+    box.disabled = false;
+    box.addEventListener('change', () => toggleTask(taskLines[i], box.checked));
+  });
+}
+
+function toggleTask(lineIndex, checked) {
+  const lines = current.text.split('\n');
+  const updated = lines[lineIndex]?.replace(TASK_LINE_RE, `$1${checked ? 'x' : ' '}$3`);
+  if (typeof updated !== 'string') return;
+  lines[lineIndex] = updated;
+  current.text = lines.join('\n');
+  // A node restored from the recents cache reads from its own text — keep it
+  // in step so reopening within this session shows the tick too.
+  if (typeof current.node.text === 'string') current.node.text = current.text;
+  docDirty = true;
+  // The browser-side save: the recents cache holds the updated text for any
+  // document without a file handle behind it.
+  recordRecent(current.node, { dirName: tree?.name || '', text: current.text })
+    .then((list) => { recents = list; renderRecents(); })
+    .catch(() => { /* the in-memory text still has the tick */ });
+  saveCurrent({ auto: true });
+  updateSaveUi();
+}
+
+const canWriteBack = () => typeof current?.node?.handle?.createWritable === 'function';
+
+function updateSaveUi() {
+  els.saveBtn.hidden = !current || !docDirty;
+  const label = canWriteBack() ? 'Save changes to the file' : 'Save an updated copy';
+  els.saveBtn.title = `${label} (⌘S)`;
+  els.saveBtn.setAttribute('aria-label', label);
+}
+
+async function saveCurrent({ auto = false } = {}) {
+  if (!current || !docDirty) return;
+  if (canWriteBack()) {
+    const handle = current.node.handle;
+    if (auto && writeDeclined) return;
+    try {
+      let perm = await handle.queryPermission({ mode: 'readwrite' });
+      if (perm !== 'granted') perm = await handle.requestPermission({ mode: 'readwrite' });
+      if (perm !== 'granted') {
+        writeDeclined = true;
+        if (!auto) toast('No permission to write the file.');
+        updateSaveUi();
+        return;
+      }
+      const writable = await handle.createWritable();
+      await writable.write(current.text);
+      await writable.close();
+      docDirty = false;
+      writeDeclined = false;
+      // Our own write moved the modification time; recording it stops the
+      // focus-refresh from re-reading a file that hasn't changed under us.
+      try { current.lastModified = (await handle.getFile()).lastModified; } catch { /* next refresh re-reads, same content */ }
+      updateSaveUi();
+      if (!auto) toast('Saved.');
+    } catch {
+      updateSaveUi();
+      if (!auto) toast('Couldn’t save the file.');
+    }
+    return;
+  }
+  // No writable handle (Firefox, Safari, a cached recent, pasted text): the
+  // ticks already live in the recents cache; an explicit save exports a copy.
+  if (auto) return;
+  const blob = new Blob([current.text], { type: 'text/markdown' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = current.name || 'document.md';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+  docDirty = false;
+  updateSaveUi();
+  toast('Saved an updated copy.');
+}
+
 // ---------- Opening files ----------
 
 // Resolves true once the document is on screen, false if it couldn't be read —
@@ -845,7 +968,9 @@ async function openNode(node, { keepScroll = false } = {}) {
   flushPosition();
   // The old document's ranges point into markup that is about to be replaced.
   clearHighlights();
-  current = { node, name: file.name, lastModified: file.lastModified };
+  current = { node, name: file.name, lastModified: file.lastModified, text };
+  docDirty = false;
+  writeDeclined = false;
   if (node.path) localStorage.setItem(LAST_FILE_KEY, node.path);
 
   const scrollY = keepScroll ? window.scrollY : 0;
@@ -855,6 +980,8 @@ async function openNode(node, { keepScroll = false } = {}) {
   els.searchToggle.hidden = false;
   const headings = renderMarkdownInto(els.content, text);
   buildToc(els.toc, els.outline, headings);
+  wireTaskCheckboxes();
+  updateSaveUi();
   // One scroll, set synchronously now that the document is laid out — reading
   // scrollHeight flushes layout, so the fraction lands against the real height
   // rather than the previous document's. Anything later would fight the
@@ -1111,6 +1238,9 @@ async function resumeLastDocument() {
 
 async function refreshCurrent() {
   if (!current?.node?.handle) return;
+  // Ticks not yet written to disk would be clobbered by a re-read; the save
+  // completing (or being declined and exported) re-arms the refresh.
+  if (docDirty) return;
   try {
     const file = await current.node.handle.getFile();
     if (file.lastModified === current.lastModified) return;
@@ -1285,6 +1415,7 @@ function init() {
   $('#tone-inc').addEventListener('click', () => stepTone(1));
   $('#appearance-reset').addEventListener('click', resetAppearance);
   $('#open-file-btn').addEventListener('click', openFile);
+  els.saveBtn.addEventListener('click', () => saveCurrent());
   $('#open-folder-btn').addEventListener('click', openFolder);
   $('#recents-clear').addEventListener('click', async () => {
     recents = await clearRecents();
@@ -1349,6 +1480,9 @@ function init() {
     const key = e.key.toLowerCase();
     if (key === 'o') { e.preventDefault(); if (e.shiftKey) openFolder(); else openFile(); }
     else if (key === 'b') { e.preventDefault(); toggleSidebar(); }
+    // Claimed whenever a document is open so the browser's save-page dialog
+    // never appears over one; with nothing to save it simply does nothing.
+    else if (key === 's' && !els.content.hidden) { e.preventDefault(); saveCurrent(); }
     // Only claim ⌘F when there's a document to search — on the welcome screen
     // the browser's own find bar is the more useful thing to leave alone.
     else if (key === 'f' && !els.content.hidden) { e.preventDefault(); openSearch(); }
