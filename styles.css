@@ -915,16 +915,25 @@ h4:hover .h-anchor, h5:hover .h-anchor, h6:hover .h-anchor { opacity: 1; }
 .prose li.task-item input[type="checkbox"] {
   appearance: none;
   -webkit-appearance: none;
+  /* Inputs get a small UA font of their own; inheriting makes the em-sized
+     circle scale with the label text instead of drifting out of alignment. */
+  font: inherit;
   width: 1.55em;
   height: 1.55em;
   flex: none;
-  margin: 0.05em 0 0;
+  /* Fallback: centre against the prose line-height (1.7em). */
+  margin: 0.075em 0 0;
   border: 2px solid var(--faint);
   border-radius: 50%;
   background: transparent;
   display: grid;
   place-items: center;
   transition: border-color 0.12s ease, background-color 0.12s ease;
+}
+@supports (margin-top: calc((1lh - 1em) / 2)) {
+  /* Exact: centre the circle on the label's first line box, whatever the
+     text size and line height happen to be. */
+  .prose li.task-item input[type="checkbox"] { margin-top: calc((1lh - 1.55em) / 2); }
 }
 .prose li.task-item input[type="checkbox"]:checked {
   border-color: var(--accent);
