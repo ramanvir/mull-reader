@@ -139,6 +139,18 @@ function markTaskLists(container) {
   for (const input of container.querySelectorAll('li > input[type="checkbox"]')) {
     input.closest('li').classList.add('task-item');
     input.closest('ul')?.classList.add('task-list');
+    // The label goes into its own element so it forms a shrinkable column
+    // beside the checkbox: long text then wraps within that column (hanging
+    // indent) instead of dropping to a full-width line under the box.
+    const label = document.createElement('span');
+    label.className = 'task-label';
+    let node = input.nextSibling;
+    while (node && !(node.nodeType === 1 && (node.tagName === 'UL' || node.tagName === 'OL'))) {
+      const next = node.nextSibling;
+      label.appendChild(node);
+      node = next;
+    }
+    input.after(label);
   }
 }
 
