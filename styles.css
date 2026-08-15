@@ -910,13 +910,36 @@ h4:hover .h-anchor, h5:hover .h-anchor, h6:hover .h-anchor { opacity: 1; }
    beside the label in the flex row. */
 .prose li.task-item > ul,
 .prose li.task-item > ol { flex-basis: 100%; }
+/* Drawn, not native: a native checkbox can't be round. A circle outline
+   that fills with the accent and a drawn tick when checked, Reminders-style. */
 .prose li.task-item input[type="checkbox"] {
-  accent-color: var(--accent);
-  width: 1.35em;
-  height: 1.35em;
+  appearance: none;
+  -webkit-appearance: none;
+  width: 1.55em;
+  height: 1.55em;
   flex: none;
-  margin: 0.12em 0 0;
+  margin: 0.05em 0 0;
+  border: 2px solid var(--faint);
+  border-radius: 50%;
+  background: transparent;
+  display: grid;
+  place-items: center;
+  transition: border-color 0.12s ease, background-color 0.12s ease;
 }
+.prose li.task-item input[type="checkbox"]:checked {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+.prose li.task-item input[type="checkbox"]:checked::after {
+  content: '';
+  width: 0.62em;
+  height: 0.34em;
+  border-left: 0.16em solid var(--bg);
+  border-bottom: 0.16em solid var(--bg);
+  transform: rotate(-45deg) translate(0.03em, -0.06em);
+}
+.prose li.task-item input[type="checkbox"]:disabled { border-color: var(--border); }
+.prose li.task-item input[type="checkbox"]:not(:disabled):hover { border-color: var(--accent); }
 /* The label column shrinks and wraps beside the box; without min-width: 0
    a long unbreakable word would push it below the checkbox instead. */
 .prose li.task-item > .task-label {
