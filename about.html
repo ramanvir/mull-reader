@@ -29,7 +29,7 @@
     <article class="content prose">
       <h1>About Mull Reader</h1>
 
-      <p>Mull Reader is a lightweight, open-source markdown reader built to consume knowledge created by AI agents. It <a href="./install.html">installs as a progressive web app</a>, works offline, and has no build step and no frameworks behind it.</p>
+      <p>Mull Reader is a lightweight, open-source markdown reader for knowledge created by AI agents — and a place to edit it or write your own. It began as a strict reader; documents turned out to want ticking, correcting, and starting from scratch, so now they can be edited too, while reading stays the heart of it. It <a href="./install.html">installs as a progressive web app</a>, works offline, and has no build step and no frameworks behind it.</p>
 
       <p>The challenge is no longer the availability of knowledge — agents produce it faster than anyone can keep up with. The challenge is <em>understanding</em> it, and understanding cannot be outsourced. Agents share what they know in markdown files, and we read on whatever is at hand: a phone in a queue, a tablet on the couch, a desktop at work. This is a reading environment for exactly that — a place to mull things over.</p>
 
@@ -43,7 +43,8 @@
         <li><strong>Checklists are live</strong> — tick a task-list checkbox and the tick is written into the document. In Chrome and Edge it's saved straight back to the file (the browser asks permission once, or <kbd>⌘S</kbd>); everywhere else the tick is kept with the document in Recents, and the save button in the top bar exports an updated copy.</li>
         <li><strong>Edit any document</strong> — the pencil in the top bar (<kbd>⌘E</kbd>) flips between the rendered page and the raw markdown. Edits save the same way ticks do: back to the file in Chrome and Edge, kept in Recents everywhere, exported as a copy on demand.</li>
         <li><strong>New note</strong> starts an empty document straight in the editor — type or paste markdown into it and it names itself from the first heading, then lives in Recents like any other document.</li>
-        <li><strong>Recent documents</strong> in the sidebar and on the welcome screen hold the last eight things you read, so getting back to one is a tap rather than another trip through the picker. See the <a href="./privacy.html#recent">privacy page</a> for what that stores.</li>
+        <li><strong>Rename</strong> a document by tapping its name in the top bar. A real file is renamed on disk (Chrome and Edge); a note or pasted document is renamed where it lives, in Recents.</li>
+        <li><strong>Recent documents</strong> in the sidebar and on the welcome screen hold the last twelve things you read, so getting back to one is a tap rather than another trip through the picker. See the <a href="./privacy.html#recent">privacy page</a> for what that stores.</li>
         <li><strong>Contents sidebar</strong> lists the headings with scroll-spy, above them the file tree when a folder is open; <kbd>⌘B</kbd> toggles it, and you can drag its edge to resize.</li>
         <li><strong>Settings panel</strong> slides in from the right with text size, brightness, and colour warmth, all remembered between visits. It stays open while you try things and closes when you touch anything outside it.</li>
         <li><strong>Reader mode</strong> hides everything but the page, with a reading progress percentage. <kbd>Esc</kbd> exits.</li>
@@ -77,7 +78,7 @@
       </ul>
 
       <h2>Open source</h2>
-      <p>Mull Reader is <a href="https://github.com/ramanvir/mull-reader/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">MIT licensed</a>. Issues and pull requests are welcome at <a href="https://github.com/ramanvir/mull-reader" target="_blank" rel="noopener noreferrer">github.com/ramanvir/mull-reader</a> — the guiding constraints are no build step, no frameworks, no telemetry, and documents that never leave the machine.</p>
+      <p>Mull Reader is <a href="https://github.com/ramanvir/mull-reader/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">MIT licensed</a>. Issues and pull requests are welcome at <a href="https://github.com/ramanvir/mull-reader" target="_blank" rel="noopener noreferrer">github.com/ramanvir/mull-reader</a>, and if you'd like the app to do something it doesn't, <a href="https://github.com/ramanvir/mull-reader/issues/new?template=feature_request.yml" target="_blank" rel="noopener noreferrer">request a feature</a> — a sentence is plenty. The guiding constraints are no build step, no frameworks, no telemetry, and documents that never leave the machine.</p>
 
       <nav class="doc-nav" aria-label="Related pages">
         <a href="./">Back to the reader</a>

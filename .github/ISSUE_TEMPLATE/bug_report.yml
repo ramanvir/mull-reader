@@ -1,0 +1,29 @@
+name: Bug report
+description: Something broke or doesn't work as described.
+title: "[Bug] "
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      placeholder: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: Device and browser
+      placeholder: e.g. iPhone / Safari, Windows / Chrome
+    validations:
+      required: false
+  - type: dropdown
+    id: installed
+    attributes:
+      label: Running as
+      options:
+        - In a browser tab
+        - Installed as an app
+        - Both / not sure
+    validations:
+      required: false

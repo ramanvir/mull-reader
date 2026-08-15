@@ -171,6 +171,20 @@ a { -webkit-tap-highlight-color: transparent; }
 }
 .file-name:not(:empty) { cursor: pointer; }
 
+.file-rename {
+  font: inherit;
+  font-size: 13.5px;
+  color: var(--ink);
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 3px 8px;
+  min-width: 0;
+  width: min(340px, 44vw);
+  outline: none;
+}
+.file-rename:focus { border-color: var(--accent); }
+
 .spacer { flex: 1; }
 
 .icon-btn {
@@ -685,8 +699,14 @@ details.tree-dir > summary:hover { background: var(--bg-raised); color: var(--in
 }
 .cta:hover { filter: brightness(1.08); }
 
+.welcome-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+}
+
 .cta-secondary {
-  margin-left: 10px;
   background: none;
   color: var(--muted);
   border: 1px solid var(--border);

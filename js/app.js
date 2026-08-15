@@ -827,7 +827,7 @@ function showWelcome(mode = 'default', dirName = '') {
     cta.textContent = 'Open a folder';
     cta.onclick = openFolder;
   } else {
-    sub.innerHTML = 'A lightweight, open-source markdown reader to consume knowledge created by AI agents. Mobile friendly, and all documents remain local, always. A progressive web app: install it and it works offline.';
+    sub.innerHTML = 'A lightweight, open-source markdown reader for knowledge created by AI agents — and a place to edit it or write your own. Mobile friendly, and all documents remain local, always. A progressive web app: install it and it works offline.';
     cta.textContent = 'Open a file';
     cta.onclick = openFile;
   }
@@ -1115,6 +1115,105 @@ function newNote() {
   if (isPhone() && !document.body.classList.contains('sidebar-collapsed')) {
     toggleSidebar();
   }
+}
+
+// ---------- Renaming ----------
+// Tapping the file name in the topbar swaps it for an input. A document with
+// a real file behind it is renamed on disk (or not at all — the display name
+// never lies about the file); notes and pasted documents rename their recents
+// entry, which is where they live.
+
+function startRename() {
+  if (!current || document.querySelector('.file-rename')) return;
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'file-rename';
+  input.value = current.name;
+  input.setAttribute('aria-label', 'Rename document');
+  els.fileName.hidden = true;
+  els.fileName.after(input);
+  input.focus();
+  const dot = input.value.lastIndexOf('.');
+  input.setSelectionRange(0, dot > 0 ? dot : input.value.length);
+  let done = false;
+  const finish = (commit) => {
+    if (done) return;
+    done = true;
+    const value = input.value;
+    input.remove();
+    els.fileName.hidden = false;
+    if (commit) commitRename(value);
+  };
+  input.addEventListener('keydown', (e) => {
+    e.stopPropagation();
+    if (e.key === 'Enter') finish(true);
+    else if (e.key === 'Escape') finish(false);
+  });
+  input.addEventListener('blur', () => finish(true));
+}
+
+async function commitRename(raw) {
+  if (!current) return;
+  let name = raw.trim().replace(/[\\/:*?"<>|]/g, '').slice(0, 80);
+  if (!name) return;
+  if (!/\.(md|markdown)$/i.test(name)) name += '.md';
+  if (name === current.name) return;
+  const node = current.node;
+  const oldName = current.name;
+  const oldKey = docKey(node);
+
+  if (node.handle) {
+    if (typeof node.handle.move !== 'function') {
+      toast('This browser can’t rename files on disk.');
+      return;
+    }
+    try {
+      let perm = await node.handle.queryPermission({ mode: 'readwrite' });
+      if (perm !== 'granted') perm = await node.handle.requestPermission({ mode: 'readwrite' });
+      if (perm !== 'granted') {
+        toast('No permission to rename the file.');
+        return;
+      }
+      await node.handle.move(name);
+    } catch {
+      toast('Couldn’t rename the file.');
+      return;
+    }
+  }
+
+  node.name = name;
+  if (node.path) node.path = node.path.replace(/[^/]*$/, name);
+  current.name = name;
+  setDocTitle(name);
+
+  // Recents identity for handle-less documents is the name — move the row
+  // rather than leave a twin behind under the old one.
+  const stale = recents.find((r) => !r.handle && r.name === oldName);
+  if (stale) {
+    try { recents = await forgetRecent(stale.id); } catch { /* twin stays, harmless */ }
+  }
+  recordRecent(node, { dirName: tree?.name || '', text: current.text })
+    .then((list) => { recents = list; renderRecents(); })
+    .catch(() => { /* the rename itself already happened */ });
+
+  // The reading position was filed under the old name or path.
+  const positions = readPositions();
+  if (positions[oldKey]) {
+    positions[docKey(node)] = positions[oldKey];
+    delete positions[oldKey];
+    try { localStorage.setItem(POSITIONS_KEY, JSON.stringify(positions)); } catch { /* position simply resets */ }
+  }
+  if (node.path) localStorage.setItem(LAST_FILE_KEY, node.path);
+
+  // A renamed folder file still sits in the tree under its old name.
+  if (node.handle && tree?.handle) {
+    try {
+      tree = await buildTree(tree.handle);
+      renderTree();
+      highlightCurrentInTree();
+    } catch { /* the tree catches up when the folder is next opened */ }
+  }
+  toast('Renamed.');
 }
 
 // ---------- Opening files ----------
@@ -1588,11 +1687,9 @@ function init() {
     renderRecents();
     toast('Recent documents cleared.');
   });
-  // The topbar file name can truncate on narrow screens — tapping it shows
-  // the full name (with its folder path when one is open) as a toast.
-  els.fileName.addEventListener('click', () => {
-    if (els.fileName.textContent) toast(current?.node?.path || els.fileName.textContent);
-  });
+  // Tapping the topbar file name renames the document in place; the hover
+  // title still carries the full folder path for truncated names.
+  els.fileName.addEventListener('click', startRename);
   // The welcome CTA's label and action are owned by showWelcome() per mode,
   // so it gets no static listener here.
   $('#welcome-open-file-btn').onclick = openFile;
@@ -1606,9 +1703,7 @@ function init() {
   // Where picking a file means a slow trip through the Files app, pasting is
   // the faster door — so put it on the welcome screen rather than behind the
   // sidebar, which starts collapsed on a phone anyway.
-  const welcomePaste = $('#welcome-paste-btn');
-  welcomePaste.hidden = !(isIos || !supportsFS);
-  welcomePaste.onclick = pasteFromClipboard;
+  $('#welcome-paste-btn').onclick = pasteFromClipboard;
   $('#welcome-hint').hidden = !(isIos && isStandalone);
 
   els.dirInput.addEventListener('change', () => {

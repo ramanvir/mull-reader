@@ -1,0 +1,31 @@
+name: Feature request
+description: Suggest something Mull Reader should do.
+title: "[Feature] "
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time — requests like this are how the reader grows.
+        A sentence or two is plenty; you don't need to fill in every field.
+  - type: textarea
+    id: what
+    attributes:
+      label: What would you like Mull Reader to do?
+      placeholder: e.g. "Let me export a document as PDF"
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: What would you use it for?
+      description: The situation you were in when you wished for this.
+    validations:
+      required: false
+  - type: input
+    id: device
+    attributes:
+      label: Device and browser
+      placeholder: e.g. iPhone / Safari, Windows / Chrome
+    validations:
+      required: false

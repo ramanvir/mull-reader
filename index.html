@@ -17,7 +17,7 @@
   </script>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Mull Reader - Markdown Reader</title>
-  <meta name="description" content="A lightweight, open-source, mobile-friendly markdown reader to consume knowledge created by AI agents. All documents remain local, always.">
+  <meta name="description" content="A lightweight, open-source, mobile-friendly markdown reader for knowledge created by AI agents — read it, edit it, or write your own. All documents remain local, always.">
   <meta name="theme-color" content="#faf9f7" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#1c1b1a" media="(prefers-color-scheme: dark)">
   <meta name="mobile-web-app-capable" content="yes">
@@ -27,14 +27,14 @@
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Mull Reader">
   <meta property="og:title" content="Mull Reader - Markdown Reader">
-  <meta property="og:description" content="A lightweight, open-source, mobile-friendly markdown reader to consume knowledge created by AI agents. All documents remain local, always.">
+  <meta property="og:description" content="A lightweight, open-source, mobile-friendly markdown reader for knowledge created by AI agents — read it, edit it, or write your own. All documents remain local, always.">
   <meta property="og:url" content="https://mullreader.com/">
   <meta property="og:image" content="https://mullreader.com/icons/og-image.png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Mull Reader - Markdown Reader">
-  <meta name="twitter:description" content="A lightweight, open-source, mobile-friendly markdown reader to consume knowledge created by AI agents. All documents remain local, always.">
+  <meta name="twitter:description" content="A lightweight, open-source, mobile-friendly markdown reader for knowledge created by AI agents — read it, edit it, or write your own. All documents remain local, always.">
   <meta name="twitter:image" content="https://mullreader.com/icons/og-image.png">
   <!-- The app is reachable at both mullreader.com and the GitHub Pages URL;
        point search engines and shares at the custom domain. -->
@@ -222,14 +222,15 @@
             <svg viewBox="107 149 298 247"><path d="M136 374 V178 L256 286 L376 178 V374" fill="none" stroke="currentColor" stroke-width="42" stroke-linecap="round" stroke-linejoin="round"/><path class="mark-arrow" d="M212 322 h88 L256 388 Z" fill="#c9724f"/></svg>
           </div>
           <h1>Mull Reader</h1>
-          <p class="welcome-sub">A lightweight, open-source markdown reader to consume knowledge created by AI agents. Mobile friendly, and all documents remain local, always. A progressive web app: install it and it works offline.</p>
-          <button id="welcome-open-file-btn" class="cta">Open a file</button>
-          <button id="welcome-open-folder-btn" class="cta cta-secondary">Open a folder</button>
-          <button id="welcome-new-btn" class="cta cta-secondary">New note</button>
-          <!-- Shown only where the file picker is the painful way in: js/app.js
-               reveals these on iOS, and the hint only inside an installed app,
-               where the picker can reach nothing but the Files app. -->
-          <button id="welcome-paste-btn" class="welcome-secondary" hidden>Paste markdown instead</button>
+          <p class="welcome-sub">A lightweight, open-source markdown reader for knowledge created by AI agents — and a place to edit it or write your own. Mobile friendly, and all documents remain local, always. A progressive web app: install it and it works offline.</p>
+          <!-- The two easiest ways in lead: pick a file, or paste what's on
+               the clipboard. Folders and blank notes follow. -->
+          <div class="welcome-actions">
+            <button id="welcome-open-file-btn" class="cta">Open a file</button>
+            <button id="welcome-paste-btn" class="cta cta-secondary">Paste markdown</button>
+            <button id="welcome-open-folder-btn" class="cta cta-secondary">Open a folder</button>
+            <button id="welcome-new-btn" class="cta cta-secondary">New note</button>
+          </div>
           <p id="welcome-hint" class="welcome-hint" hidden>
             An installed app can only open through the Files app. To reach Google Drive there,
             turn it on in <strong>Files → Browse → ⋯ → Edit</strong>, or copy the document in the
