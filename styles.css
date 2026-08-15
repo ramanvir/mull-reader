@@ -888,6 +888,27 @@ h4:hover .h-anchor, h5:hover .h-anchor, h6:hover .h-anchor { opacity: 1; }
    as "you have changes", not as one more quiet tool. */
 #save-btn { color: var(--accent); }
 
+/* ================= Source editor ================= */
+
+.editor {
+  display: block;
+  width: min(76ch, 100% - 40px);
+  margin: 0 auto;
+  height: calc(100dvh - var(--topbar-h) - 16px);
+  padding: 26px 8px calc(40px + var(--safe-bottom));
+  border: 0;
+  outline: none;
+  resize: none;
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 13.5px;
+  line-height: 1.7;
+  tab-size: 2;
+}
+.editor[hidden] { display: none; }
+.editor::placeholder { color: var(--faint); }
+
 .prose hr {
   border: 0;
   margin: 2.6em auto;

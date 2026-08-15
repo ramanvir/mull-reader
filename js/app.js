@@ -29,6 +29,8 @@ const els = {
   searchCount: $('#search-count'),
   searchToggle: $('#search-toggle'),
   saveBtn: $('#save-btn'),
+  editor: $('#editor'),
+  editToggle: $('#edit-toggle'),
 };
 
 // Storage keys keep their original 'folio-' names (the app's former name)
@@ -69,8 +71,9 @@ const TONE_NEUTRAL_INDEX = 3;
 let tree = null;          // current folder tree (or null)
 let current = null;       // { node, name, lastModified, text }
 let recents = [];         // most-recently-read documents, newest first
-let docDirty = false;     // checkbox edits not yet written to the file
-let writeDeclined = false; // write permission refused — stop re-asking per tick
+let docDirty = false;     // edits not yet written to the file
+let writeDeclined = false; // write permission refused — stop re-asking per edit
+let editing = false;      // the source editor is on screen
 
 // ---------- Toasts ----------
 
@@ -797,10 +800,12 @@ async function openRecent(entry) {
 
 function showWelcome(mode = 'default', dirName = '') {
   if (searchIsOpen()) closeSearch();
+  stopEditingUi();
   els.content.hidden = true;
   els.outline.hidden = true;
   els.searchToggle.hidden = true;
   els.saveBtn.hidden = true;
+  els.editToggle.hidden = true;
   els.welcome.hidden = false;
   els.fileName.textContent = '';
   els.fileName.removeAttribute('title');
@@ -811,7 +816,7 @@ function showWelcome(mode = 'default', dirName = '') {
   const sub = inner.querySelector('.welcome-sub');
   // The secondary folder CTA only belongs to the default state — reconnect and
   // empty-folder already put a folder action in the primary button.
-  inner.querySelector('.cta-secondary').hidden = mode !== 'default';
+  for (const alt of inner.querySelectorAll('.cta-secondary')) alt.hidden = mode !== 'default';
   // Each mode owns both the label and the action so they can't drift apart.
   if (mode === 'reconnect') {
     sub.innerHTML = `Welcome back. Reconnect to <strong>${escapeHtml(dirName)}</strong> to keep reading.`;
@@ -951,6 +956,167 @@ async function saveCurrent({ auto = false } = {}) {
   toast('Saved an updated copy.');
 }
 
+// ---------- Source editor ----------
+// The pencil in the topbar flips the open document between its rendered form
+// and its raw markdown in a plain textarea. Edits flow through the same pipe
+// as checkbox ticks: into memory, into the recents cache, and — with a
+// writable handle — back into the file itself. "New note" starts an empty
+// document straight in the editor; it names itself from the first heading
+// typed or pasted into it, and lives on in recents like any pasted document.
+
+const UNTITLED = 'Untitled note.md';
+const EDITOR_COMMIT_DEBOUNCE = 500;
+let editorTimer = null;
+
+function deriveDocName(text, fallback = 'Pasted note') {
+  const heading = text.match(/^#{1,6}[ \t]+(.+?)[ \t]*#*$/m);
+  const name = (heading?.[1] || fallback).trim().replace(/[\\/:*?"<>|]/g, '').slice(0, 60);
+  return `${name || fallback}.md`;
+}
+
+function setDocTitle(name) {
+  els.fileName.textContent = name;
+  els.fileName.title = current?.node?.path || name;
+  document.title = `${name} - Mull Reader`;
+}
+
+// A new note starts as "Untitled" and takes its name from the first heading
+// to appear — once, so the name doesn't churn with every later heading edit.
+async function maybeAutoName(doc) {
+  if (!doc || doc.node.handle || doc.name !== UNTITLED) return;
+  const named = deriveDocName(doc.text, '');
+  if (named === '.md') return;
+  const oldName = doc.name;
+  doc.name = named;
+  doc.node.name = named;
+  if (doc === current) setDocTitle(named);
+  // The placeholder may already sit in recents; identity there is by name,
+  // so drop the old row rather than leave an Untitled twin behind.
+  const stale = recents.find((r) => !r.handle && r.name === oldName);
+  if (stale) {
+    try { recents = await forgetRecent(stale.id); renderRecents(); } catch { /* twin stays, harmless */ }
+  }
+}
+
+// Fold whatever is in the textarea into the document and its saves. The
+// snapshot survives a document switch: the async tail must file the text
+// under the document that was edited, never whatever is on screen by then.
+function commitEditor() {
+  clearTimeout(editorTimer);
+  editorTimer = null;
+  // A late blur or timer can fire after the editor was put away and another
+  // document took the screen — folding the stale textarea into it would
+  // replace that document's text wholesale.
+  if (!editing || !current || els.editor.value === current.text) return;
+  current.text = els.editor.value;
+  if (typeof current.node.text === 'string') current.node.text = current.text;
+  docDirty = true;
+  const snap = current;
+  maybeAutoName(snap).finally(() => {
+    if (snap.text.trim()) {
+      recordRecent(snap.node, { dirName: tree?.name || '', text: snap.text })
+        .then((list) => { recents = list; renderRecents(); })
+        .catch(() => { /* the in-memory text still has the edit */ });
+    }
+    saveSnapshot(snap);
+    updateSaveUi();
+  });
+}
+
+// The document on screen saves through the full path, permission prompt and
+// all; one that was switched away from gets a quiet best-effort write.
+async function saveSnapshot(snap) {
+  if (snap === current) {
+    saveCurrent({ auto: true });
+    return;
+  }
+  const handle = snap.node.handle;
+  if (typeof handle?.createWritable !== 'function') return;
+  try {
+    if ((await handle.queryPermission({ mode: 'readwrite' })) !== 'granted') return;
+    const writable = await handle.createWritable();
+    await writable.write(snap.text);
+    await writable.close();
+  } catch { /* the recents cache still holds the text */ }
+}
+
+function scheduleEditorCommit() {
+  clearTimeout(editorTimer);
+  editorTimer = setTimeout(commitEditor, EDITOR_COMMIT_DEBOUNCE);
+}
+
+function enterEdit() {
+  if (!current || editing) return;
+  if (searchIsOpen()) closeSearch();
+  editing = true;
+  els.editor.value = current.text;
+  els.welcome.hidden = true;
+  els.content.hidden = true;
+  els.searchToggle.hidden = true;
+  els.editor.hidden = false;
+  els.editToggle.hidden = false;
+  els.editToggle.setAttribute('aria-pressed', 'true');
+  updateProgress();
+  els.editor.focus();
+}
+
+function exitEdit() {
+  if (!editing) return;
+  commitEditor();
+  stopEditingUi();
+  renderCurrentText();
+}
+
+// Puts the editor away without rendering — for when another document is
+// about to take the screen anyway.
+function stopEditingUi() {
+  if (!editing) return;
+  commitEditor();
+  editing = false;
+  els.editor.hidden = true;
+  els.editToggle.setAttribute('aria-pressed', 'false');
+}
+
+function toggleEdit() {
+  if (editing) exitEdit();
+  else enterEdit();
+}
+
+// Re-render the current document from the text in memory — same layout work
+// as openNode, minus the file read and the bookkeeping.
+function renderCurrentText() {
+  const scrollY = window.scrollY;
+  els.welcome.hidden = true;
+  els.content.hidden = false;
+  els.searchToggle.hidden = false;
+  const headings = renderMarkdownInto(els.content, current.text);
+  buildToc(els.toc, els.outline, headings);
+  wireTaskCheckboxes();
+  updateSaveUi();
+  window.scrollTo(0, scrollY);
+  setDocTitle(current.name);
+  highlightCurrentInTree();
+  updateProgress();
+}
+
+function newNote() {
+  flushPosition();
+  clearHighlights();
+  if (searchIsOpen()) closeSearch();
+  stopEditingUi();
+  const node = { name: UNTITLED, path: '', kind: 'file', text: '' };
+  current = { node, name: UNTITLED, lastModified: Date.now(), text: '' };
+  docDirty = false;
+  writeDeclined = false;
+  setDocTitle(UNTITLED);
+  updateSaveUi();
+  enterEdit();
+  // On phones the sidebar is a fixed overlay — tuck it away over the editor.
+  if (isPhone() && !document.body.classList.contains('sidebar-collapsed')) {
+    toggleSidebar();
+  }
+}
+
 // ---------- Opening files ----------
 
 // Resolves true once the document is on screen, false if it couldn't be read —
@@ -965,6 +1131,7 @@ async function openNode(node, { keepScroll = false } = {}) {
   }
   // Anything still owed to the outgoing document is written before `current`
   // moves on, since the pending save was filed under its key.
+  stopEditingUi();
   flushPosition();
   // The old document's ranges point into markup that is about to be replaced.
   clearHighlights();
@@ -978,6 +1145,7 @@ async function openNode(node, { keepScroll = false } = {}) {
   els.welcome.hidden = true;
   els.content.hidden = false;
   els.searchToggle.hidden = false;
+  els.editToggle.hidden = false;
   const headings = renderMarkdownInto(els.content, text);
   buildToc(els.toc, els.outline, headings);
   wireTaskCheckboxes();
@@ -1102,9 +1270,7 @@ async function openFileSelection(files) {
 // behind it, so recents keeps it the same way it keeps any other handle-less
 // document — which means it survives a reload.
 function openPastedText(text) {
-  const heading = text.match(/^#{1,6}[ \t]+(.+?)[ \t]*#*$/m);
-  const name = (heading?.[1] || 'Pasted note').trim().replace(/[\\/:*?"<>|]/g, '').slice(0, 60);
-  return openNode({ name: `${name || 'Pasted note'}.md`, path: '', kind: 'file', text });
+  return openNode({ name: deriveDocName(text), path: '', kind: 'file', text });
 }
 
 async function pasteFromClipboard() {
@@ -1238,9 +1404,9 @@ async function resumeLastDocument() {
 
 async function refreshCurrent() {
   if (!current?.node?.handle) return;
-  // Ticks not yet written to disk would be clobbered by a re-read; the save
-  // completing (or being declined and exported) re-arms the refresh.
-  if (docDirty) return;
+  // Edits not yet written to disk would be clobbered by a re-read, and a
+  // re-render would pull the document out from under the open editor.
+  if (docDirty || editing) return;
   try {
     const file = await current.node.handle.getFile();
     if (file.lastModified === current.lastModified) return;
@@ -1431,6 +1597,12 @@ function init() {
   // so it gets no static listener here.
   $('#welcome-open-file-btn').onclick = openFile;
   $('#welcome-open-folder-btn').addEventListener('click', openFolder);
+  $('#welcome-new-btn').addEventListener('click', newNote);
+  $('#new-note-btn').addEventListener('click', newNote);
+  els.editToggle.addEventListener('click', toggleEdit);
+  els.editor.addEventListener('input', scheduleEditorCommit);
+  // A backgrounded tab may never see another input event — commit what's there.
+  els.editor.addEventListener('blur', commitEditor);
   // Where picking a file means a slow trip through the Files app, pasting is
   // the faster door — so put it on the welcome screen rather than behind the
   // sidebar, which starts collapsed on a phone anyway.
@@ -1472,6 +1644,10 @@ function init() {
       closeSearch();
       return;
     }
+    if (e.key === 'Escape' && editing) {
+      exitEdit();
+      return;
+    }
     if (e.key === 'Escape' && document.body.classList.contains('reader-mode')) {
       toggleReader();
       return;
@@ -1482,7 +1658,8 @@ function init() {
     else if (key === 'b') { e.preventDefault(); toggleSidebar(); }
     // Claimed whenever a document is open so the browser's save-page dialog
     // never appears over one; with nothing to save it simply does nothing.
-    else if (key === 's' && !els.content.hidden) { e.preventDefault(); saveCurrent(); }
+    else if (key === 's' && (!els.content.hidden || editing)) { e.preventDefault(); commitEditor(); saveCurrent(); }
+    else if (key === 'e' && current) { e.preventDefault(); toggleEdit(); }
     // Only claim ⌘F when there's a document to search — on the welcome screen
     // the browser's own find bar is the more useful thing to leave alone.
     else if (key === 'f' && !els.content.hidden) { e.preventDefault(); openSearch(); }
