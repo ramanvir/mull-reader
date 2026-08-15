@@ -49,7 +49,7 @@
       <p>If you open a folder, your browser also keeps a reference to it in <code>IndexedDB</code> so the app can offer to reconnect to it next time. That reference is a permission handle held by the browser, not a copy of the folder or of anything in it, and reconnecting still requires your permission.</p>
 
       <h2 id="recent">Recent documents</h2>
-      <p>The app remembers the last eight documents you opened so you can return to one without hunting for it again. What that costs in storage depends on how your browser handed the file over:</p>
+      <p>The app remembers the last twelve documents you opened so you can return to one without hunting for it again. What that costs in storage depends on how your browser handed the file over:</p>
       <ul>
         <li><strong>On browsers with the File System Access API</strong> (Chrome, Edge, and other Chromium browsers on desktop), the entry holds the file's name and a permission handle — the same kind of reference described above. The document is re-read from disk when you reopen it, so no copy of it is kept.</li>
         <li><strong>Everywhere else</strong> — Safari, Firefox, and any file that arrives from a cloud provider such as Google Drive or iCloud, from a drag and drop, or from the operating system opening a file with the app — the browser gives the app the file's contents and no way to reach that file again. To make the entry work at all, the document's text is stored in <code>IndexedDB</code> on your device. Documents over roughly one megabyte are skipped rather than stored.</li>

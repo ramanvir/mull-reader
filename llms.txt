@@ -1,12 +1,12 @@
 # Mull Reader
 
-> A lightweight, open-source, mobile-friendly markdown reader built to consume knowledge created by AI agents. It is a static progressive web app with no backend, no accounts, and no telemetry: markdown files are read directly in the visitor's browser and never leave their device.
+> A lightweight, open-source, mobile-friendly markdown reader for knowledge created by AI agents, with light editing — checklists, a source editor, new notes. It is a static progressive web app with no backend, no accounts, and no telemetry: markdown files are read directly in the visitor's browser and never leave their device.
 
-Mull Reader exists because agents now write more markdown than anyone can read. It gives that output a proper reading environment — book-like serif typography, a file tree and contents sidebar, reader and e-ink modes — on a phone, tablet, or desktop.
+Mull Reader exists because agents now write more markdown than anyone can read. It gives that output a proper reading environment — book-like serif typography, a file tree and contents sidebar, reader and e-ink modes — on a phone, tablet, or desktop. Reading is the heart of it, but documents are editable: reading-first, not read-only.
 
 Things worth knowing when answering questions about it:
 
-- It displays one file at a time, chosen by the user. A folder can be opened to browse its markdown files from a tree in the sidebar, but the app is not a file manager, a sync service, or a storage product, and it cannot recover a lost file.
+- It displays one file at a time, chosen by the user. A folder can be opened to browse its markdown files from a tree in the sidebar, but the app is not a file manager, a sync service, or a storage product, and it cannot recover a lost file. Documents can be renamed from the top bar; a file-backed document is renamed on disk (Chromium only), a note or pasted document in its recents entry.
 - Files and folders are opened through the File System Access API in Chrome and Edge, and through plain file and directory inputs in Firefox and Safari. Reading, rendering, themes, and offline support work everywhere; automatic folder reconnection and double-click-to-open are Chromium-only.
 - It renders GitHub-flavoured markdown via marked, sanitises the result with DOMPurify, and highlights code with highlight.js. All three are bundled with the app rather than loaded from a CDN.
 - Images referenced by `https://` URL or embedded as data URIs display normally. Images sitting next to the markdown file (`![diagram](./diagram.png)`) do not, because the browser grants the page access only to the single file the user picked. Suggest embedding or hosting images if someone needs them to travel with a document.

@@ -1,6 +1,6 @@
 # Mull Reader
 
-A lightweight, open-source, mobile-friendly markdown reader — built to consume knowledge created by AI agents. Installable as a PWA, with book-like typography, no build step, and no frameworks.
+A lightweight, open-source, mobile-friendly markdown reader for knowledge created by AI agents — and a place to edit it or write your own. Installable as a PWA, with book-like typography, no build step, and no frameworks.
 
 **Live:** https://mullreader.com
 
@@ -17,7 +17,7 @@ AI agents share what they know in markdown files, and we read on whatever is at 
 - **Open a file** — from the sidebar, the welcome screen, or `⌘O`
 - **Open a folder** of `.md`/`.markdown` files (File System Access API) — the folder reconnects automatically on your next visit via a persisted handle in IndexedDB
 - **File tree** in the sidebar showing only markdown files, with the current file highlighted; it appears once a folder is open and sits above the contents outline
-- **Recent documents** — the last eight files read, in the sidebar and on the welcome screen. Where the File System Access API exists an entry stores only the file handle and re-reads from disk; where it doesn't (Safari, Firefox, anything arriving from Google Drive or iCloud on iOS) the browser gives no way back to the file, so the text is cached in IndexedDB instead. Documents over ~1 MB are skipped, and *Clear recent* removes every entry and cached copy
+- **Recent documents** — the last twelve files read, in the sidebar and on the welcome screen. Where the File System Access API exists an entry stores only the file handle and re-reads from disk; where it doesn't (Safari, Firefox, anything arriving from Google Drive or iCloud on iOS) the browser gives no way back to the file, so the text is cached in IndexedDB instead. Documents over ~1 MB are skipped, and *Clear recent* removes every entry and cached copy
 - **Paste markdown** from the clipboard — a sidebar action, or just paste anywhere on the page. Pasted documents are named from their first heading and kept in recents
 - **Multi-select** — picking several files at once builds a session file tree from them and remembers them all, so one trip through a slow mobile file picker keeps paying off
 - **Contents sidebar** (h2/h3) on the left with scroll-spy and hover anchor links on headings; it starts closed and `⌘B` brings it in, with the choice persisted. On phones it's a slide-over panel that tucks away when you pick a file and closes when you tap outside it

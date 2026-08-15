@@ -68,7 +68,7 @@ export function clearDirHandle() {
 // only thing that makes recents work on iOS/Google Drive. It stays in this
 // origin's IndexedDB and is dropped when the entry falls off the list.
 
-export const MAX_RECENTS = 8;
+export const MAX_RECENTS = 12;
 
 // Big documents aren't worth the storage; they're skipped rather than cached.
 const MAX_CACHED_TEXT = 1_000_000;
