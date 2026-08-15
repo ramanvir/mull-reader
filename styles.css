@@ -917,6 +917,13 @@ h4:hover .h-anchor, h5:hover .h-anchor, h6:hover .h-anchor { opacity: 1; }
   flex: none;
   margin: 0.12em 0 0;
 }
+/* The label column shrinks and wraps beside the box; without min-width: 0
+   a long unbreakable word would push it below the checkbox instead. */
+.prose li.task-item > .task-label {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
 .prose input[type="checkbox"]:not(:disabled) { cursor: pointer; }
 .prose li.task-item:has(> input[type="checkbox"]:not(:disabled)) { cursor: pointer; }
 .prose li.task-item:has(> input[type="checkbox"]:not(:disabled)):hover { background: var(--bg-raised); }
