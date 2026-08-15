@@ -882,6 +882,11 @@ h4:hover .h-anchor, h5:hover .h-anchor, h6:hover .h-anchor { opacity: 1; }
   transform: translateY(2px);
   margin: 0;
 }
+.prose input[type="checkbox"]:not(:disabled) { cursor: pointer; }
+
+/* Unsaved ticks waiting to be written — the accent makes the button read
+   as "you have changes", not as one more quiet tool. */
+#save-btn { color: var(--accent); }
 
 .prose hr {
   border: 0;
