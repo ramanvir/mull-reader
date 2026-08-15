@@ -876,8 +876,101 @@ function setupTaskRowTaps() {
     const box = li.querySelector(':scope > input[type="checkbox"]');
     if (!box || box.disabled) return;
     box.checked = !box.checked;
-    box.dispatchEvent(new Event('change'));
+    box.dispatchEvent(new Event('change', { bubbles: true }));
   });
+  // Any tick, however it arrived, refreshes the done-count in the tools strip.
+  els.content.addEventListener('change', (e) => {
+    if (e.target.matches?.('input[type="checkbox"]')) taskToolsSync?.();
+  });
+}
+
+// ---------- Checklist view tools ----------
+// A small strip above the first checklist: a done-count, "Hide completed",
+// and "Completed last". Strictly view-only — hiding is display:none and the
+// re-order is CSS `order`, so the DOM sequence (and with it the screen-to-
+// source-line mapping) and the file itself are never touched. The choice is
+// remembered per document.
+
+const TASK_VIEW_KEY = 'folio-task-view';
+const MAX_TASK_VIEWS = 200;
+
+let taskToolsSync = null;   // refreshes the current strip, when there is one
+
+function readTaskViews() {
+  try {
+    const map = JSON.parse(localStorage.getItem(TASK_VIEW_KEY));
+    return map && typeof map === 'object' && !Array.isArray(map) ? map : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveTaskView(key, view) {
+  if (!key) return;
+  const map = readTaskViews();
+  if (!view.h && !view.b) delete map[key];
+  else map[key] = { h: view.h ? 1 : 0, b: view.b ? 1 : 0, ts: Date.now() };
+  const keys = Object.keys(map);
+  if (keys.length > MAX_TASK_VIEWS) {
+    keys.sort((a, b) => (map[b]?.ts || 0) - (map[a]?.ts || 0));
+    for (const k of keys.slice(MAX_TASK_VIEWS)) delete map[k];
+  }
+  try { localStorage.setItem(TASK_VIEW_KEY, JSON.stringify(map)); } catch { /* view still applies this session */ }
+}
+
+function applyTaskView(view) {
+  els.content.classList.toggle('tasks-hide-done', !!view.h);
+  els.content.classList.toggle('tasks-done-last', !!view.b);
+}
+
+function setupTaskTools() {
+  els.content.querySelector('.task-tools')?.remove();
+  taskToolsSync = null;
+  applyTaskView({ h: 0, b: 0 });
+  const items = els.content.querySelectorAll('li.task-item');
+  if (!items.length) return;
+
+  const key = docKey(current.node);
+  const stored = readTaskViews()[key];
+  const view = { h: stored?.h ? 1 : 0, b: stored?.b ? 1 : 0 };
+
+  const strip = document.createElement('div');
+  strip.className = 'task-tools';
+  const count = document.createElement('span');
+  count.className = 'task-count';
+  const chip = (label) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'task-chip';
+    btn.textContent = label;
+    return btn;
+  };
+  const hide = chip('Hide completed');
+  const last = chip('Completed last');
+  strip.append(count, hide, last);
+
+  const sync = () => {
+    const boxes = els.content.querySelectorAll('li.task-item > input[type="checkbox"]');
+    let done = 0;
+    for (const box of boxes) if (box.checked) done++;
+    count.textContent = `${done} of ${boxes.length} done`;
+    hide.setAttribute('aria-pressed', String(!!view.h));
+    last.setAttribute('aria-pressed', String(!!view.b));
+    applyTaskView(view);
+  };
+  hide.addEventListener('click', () => { view.h = view.h ? 0 : 1; saveTaskView(key, view); sync(); });
+  last.addEventListener('click', () => { view.b = view.b ? 0 : 1; saveTaskView(key, view); sync(); });
+  taskToolsSync = sync;
+  sync();
+
+  // The strip sits just above the outermost list that holds the first task.
+  let list = items[0].closest('ul, ol');
+  while (list) {
+    const outer = list.parentElement?.closest('ul, ol');
+    if (!outer) break;
+    list = outer;
+  }
+  list.before(strip);
 }
 
 function wireTaskCheckboxes() {
@@ -1083,6 +1176,7 @@ function renderCurrentText() {
   const headings = renderMarkdownInto(els.content, current.text);
   buildToc(els.toc, els.outline, headings);
   wireTaskCheckboxes();
+  setupTaskTools();
   updateSaveUi();
   window.scrollTo(0, scrollY);
   setDocTitle(current.name);
@@ -1221,6 +1315,7 @@ async function openNode(node, { keepScroll = false } = {}) {
   const headings = renderMarkdownInto(els.content, text);
   buildToc(els.toc, els.outline, headings);
   wireTaskCheckboxes();
+  setupTaskTools();
   updateSaveUi();
   // One scroll, set synchronously now that the document is laid out — reading
   // scrollHeight flushes layout, so the fraction lands against the real height
