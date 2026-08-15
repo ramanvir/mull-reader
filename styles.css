@@ -962,6 +962,42 @@ h4:hover .h-anchor, h5:hover .h-anchor, h6:hover .h-anchor { opacity: 1; }
 /* Done items step back so the remaining work stands out. */
 .prose li.task-item:has(> input[type="checkbox"]:checked) { color: var(--muted); }
 
+/* --- checklist view tools --- */
+/* View-only: hiding is display:none and the re-order is CSS `order`, so the
+   DOM sequence and the markdown source are never touched. */
+
+.task-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+  font-family: var(--sans);
+  font-size: 12.5px;
+}
+.task-count { color: var(--faint); margin-right: 4px; }
+.task-chip {
+  font: inherit;
+  border: 1px solid var(--border);
+  background: none;
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 4px 12px;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.task-chip:hover { color: var(--ink-strong); border-color: var(--faint); }
+.task-chip[aria-pressed="true"] {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.tasks-hide-done li.task-item:has(> input[type="checkbox"]:checked) { display: none; }
+
+.tasks-done-last ul.task-list { display: flex; flex-direction: column; }
+.tasks-done-last ul.task-list > li.task-item:has(> input[type="checkbox"]:checked) { order: 9; }
+
 /* Unsaved ticks waiting to be written — the accent makes the button read
    as "you have changes", not as one more quiet tool. */
 #save-btn { color: var(--accent); }
