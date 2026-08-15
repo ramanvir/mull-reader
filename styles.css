@@ -895,14 +895,33 @@ h4:hover .h-anchor, h5:hover .h-anchor, h6:hover .h-anchor { opacity: 1; }
 .prose li { margin-top: 0.35em; }
 .prose li::marker { color: var(--faint); }
 
-.prose ul.task-list { list-style: none; padding-left: 0.4em; }
-.prose li.task-item { display: flex; gap: 0.55em; align-items: baseline; }
+.prose ul.task-list { list-style: none; padding-left: 0.2em; }
+/* Sized for thumbs: a bigger box, breathing room around the row, and the
+   whole row is the tap target (wired in app.js), not just the square. */
+.prose li.task-item {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65em;
+  align-items: flex-start;
+  padding: 0.4em 0.5em;
+  border-radius: 8px;
+}
+/* A nested list inside a task drops below the row instead of riding
+   beside the label in the flex row. */
+.prose li.task-item > ul,
+.prose li.task-item > ol { flex-basis: 100%; }
 .prose li.task-item input[type="checkbox"] {
   accent-color: var(--accent);
-  transform: translateY(2px);
-  margin: 0;
+  width: 1.35em;
+  height: 1.35em;
+  flex: none;
+  margin: 0.12em 0 0;
 }
 .prose input[type="checkbox"]:not(:disabled) { cursor: pointer; }
+.prose li.task-item:has(> input[type="checkbox"]:not(:disabled)) { cursor: pointer; }
+.prose li.task-item:has(> input[type="checkbox"]:not(:disabled)):hover { background: var(--bg-raised); }
+/* Done items step back so the remaining work stands out. */
+.prose li.task-item:has(> input[type="checkbox"]:checked) { color: var(--muted); }
 
 /* Unsaved ticks waiting to be written — the accent makes the button read
    as "you have changes", not as one more quiet tool. */
