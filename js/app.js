@@ -866,6 +866,20 @@ function scanTaskLines(text) {
   return found;
 }
 
+// The checkbox square is a small target on a phone — let the whole task row
+// take the tap. Wired once on the container; the rows inside come and go.
+function setupTaskRowTaps() {
+  els.content.addEventListener('click', (e) => {
+    if (e.target.closest('a, input, button, pre')) return;
+    const li = e.target.closest('li');
+    if (!li || !li.classList.contains('task-item')) return;
+    const box = li.querySelector(':scope > input[type="checkbox"]');
+    if (!box || box.disabled) return;
+    box.checked = !box.checked;
+    box.dispatchEvent(new Event('change'));
+  });
+}
+
 function wireTaskCheckboxes() {
   const boxes = [...els.content.querySelectorAll('input[type="checkbox"]')];
   if (!boxes.length) return;
@@ -960,11 +974,8 @@ async function saveCurrent({ auto = false } = {}) {
 // The pencil in the topbar flips the open document between its rendered form
 // and its raw markdown in a plain textarea. Edits flow through the same pipe
 // as checkbox ticks: into memory, into the recents cache, and — with a
-// writable handle — back into the file itself. "New note" starts an empty
-// document straight in the editor; it names itself from the first heading
-// typed or pasted into it, and lives on in recents like any pasted document.
+// writable handle — back into the file itself.
 
-const UNTITLED = 'Untitled note.md';
 const EDITOR_COMMIT_DEBOUNCE = 500;
 let editorTimer = null;
 
@@ -978,24 +989,6 @@ function setDocTitle(name) {
   els.fileName.textContent = name;
   els.fileName.title = current?.node?.path || name;
   document.title = `${name} - Mull Reader`;
-}
-
-// A new note starts as "Untitled" and takes its name from the first heading
-// to appear — once, so the name doesn't churn with every later heading edit.
-async function maybeAutoName(doc) {
-  if (!doc || doc.node.handle || doc.name !== UNTITLED) return;
-  const named = deriveDocName(doc.text, '');
-  if (named === '.md') return;
-  const oldName = doc.name;
-  doc.name = named;
-  doc.node.name = named;
-  if (doc === current) setDocTitle(named);
-  // The placeholder may already sit in recents; identity there is by name,
-  // so drop the old row rather than leave an Untitled twin behind.
-  const stale = recents.find((r) => !r.handle && r.name === oldName);
-  if (stale) {
-    try { recents = await forgetRecent(stale.id); renderRecents(); } catch { /* twin stays, harmless */ }
-  }
 }
 
 // Fold whatever is in the textarea into the document and its saves. The
@@ -1012,15 +1005,13 @@ function commitEditor() {
   if (typeof current.node.text === 'string') current.node.text = current.text;
   docDirty = true;
   const snap = current;
-  maybeAutoName(snap).finally(() => {
-    if (snap.text.trim()) {
-      recordRecent(snap.node, { dirName: tree?.name || '', text: snap.text })
-        .then((list) => { recents = list; renderRecents(); })
-        .catch(() => { /* the in-memory text still has the edit */ });
-    }
-    saveSnapshot(snap);
-    updateSaveUi();
-  });
+  if (snap.text.trim()) {
+    recordRecent(snap.node, { dirName: tree?.name || '', text: snap.text })
+      .then((list) => { recents = list; renderRecents(); })
+      .catch(() => { /* the in-memory text still has the edit */ });
+  }
+  saveSnapshot(snap);
+  updateSaveUi();
 }
 
 // The document on screen saves through the full path, permission prompt and
@@ -1097,24 +1088,6 @@ function renderCurrentText() {
   setDocTitle(current.name);
   highlightCurrentInTree();
   updateProgress();
-}
-
-function newNote() {
-  flushPosition();
-  clearHighlights();
-  if (searchIsOpen()) closeSearch();
-  stopEditingUi();
-  const node = { name: UNTITLED, path: '', kind: 'file', text: '' };
-  current = { node, name: UNTITLED, lastModified: Date.now(), text: '' };
-  docDirty = false;
-  writeDeclined = false;
-  setDocTitle(UNTITLED);
-  updateSaveUi();
-  enterEdit();
-  // On phones the sidebar is a fixed overlay — tuck it away over the editor.
-  if (isPhone() && !document.body.classList.contains('sidebar-collapsed')) {
-    toggleSidebar();
-  }
 }
 
 // ---------- Renaming ----------
@@ -1694,8 +1667,6 @@ function init() {
   // so it gets no static listener here.
   $('#welcome-open-file-btn').onclick = openFile;
   $('#welcome-open-folder-btn').addEventListener('click', openFolder);
-  $('#welcome-new-btn').addEventListener('click', newNote);
-  $('#new-note-btn').addEventListener('click', newNote);
   els.editToggle.addEventListener('click', toggleEdit);
   els.editor.addEventListener('input', scheduleEditorCommit);
   // A backgrounded tab may never see another input event — commit what's there.
@@ -1781,6 +1752,7 @@ function init() {
   });
 
   setupDragDrop();
+  setupTaskRowTaps();
   setupTouchReaderBar();
   setupSearch();
   setupPwa();
