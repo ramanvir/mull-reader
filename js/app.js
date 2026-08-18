@@ -748,6 +748,11 @@ function renderRecents() {
 function fillRecents(listEl) {
   listEl.innerHTML = '';
   for (const entry of recents) {
+    // Two buttons side by side, not one inside the other (invalid HTML):
+    // the row opens the document, the × beside it removes the entry.
+    const row = document.createElement('div');
+    row.className = 'recent-row';
+
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'recent-item';
@@ -766,7 +771,25 @@ function fillRecents(listEl) {
     btn.appendChild(meta);
 
     btn.addEventListener('click', () => openRecent(entry));
-    listEl.appendChild(btn);
+
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'recent-remove';
+    remove.title = 'Remove from recent documents';
+    remove.setAttribute('aria-label', `Remove “${entry.name}” from recent documents`);
+    remove.innerHTML = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>';
+    remove.addEventListener('click', async () => {
+      // Removing the entry also deletes any saved copy of the document.
+      try {
+        recents = await forgetRecent(entry.id);
+        renderRecents();
+      } catch {
+        toast('Couldn’t remove that entry.');
+      }
+    });
+
+    row.append(btn, remove);
+    listEl.appendChild(row);
   }
 }
 
