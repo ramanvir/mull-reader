@@ -850,7 +850,7 @@ function showWelcome(mode = 'default', dirName = '') {
     cta.textContent = 'Open a folder';
     cta.onclick = openFolder;
   } else {
-    sub.innerHTML = 'A lightweight, open-source markdown reader for knowledge created by AI agents — and a place to edit it or write your own. Mobile friendly, and all documents remain local, always. A progressive web app: install it and it works offline.';
+    sub.innerHTML = 'A lightweight, open-source markdown reader to consume files created by AI agents. Mobile friendly, and all documents remain local, always. A progressive web app: install it and it works offline.';
     cta.textContent = 'Open a file';
     cta.onclick = openFile;
   }
