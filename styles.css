@@ -812,7 +812,8 @@ kbd {
 .content {
   max-width: 70ch;
   margin: 0 auto;
-  padding: 20px 32px 30vh;
+  /* A slim gap under the topbar — the document should start promptly. */
+  padding: 10px 32px 30vh;
   padding-left: max(32px, var(--safe-left));
   padding-right: max(32px, var(--safe-right));
 }
@@ -1378,7 +1379,7 @@ body.reader-mode .content {
   /* The phone sidebar floats over the page, so there's no column to resize. */
   .sidebar-resizer { display: none; }
   .content {
-    padding: 32px 20px 20vh;
+    padding: 12px 20px 20vh;
     padding-left: max(20px, var(--safe-left));
     padding-right: max(20px, var(--safe-right));
   }
