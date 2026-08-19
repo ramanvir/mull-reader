@@ -1016,6 +1016,47 @@ h4:hover .h-anchor, h5:hover .h-anchor, h6:hover .h-anchor { opacity: 1; }
 
 .tasks-done-last ul.task-list { display: flex; flex-direction: column; }
 .tasks-done-last ul.task-list > li.task-item:has(> input[type="checkbox"]:checked) { order: 9; }
+.tasks-done-last ul.task-list > li.task-add-row { order: 10; }
+
+/* --- the ghost "+ Add item" row --- */
+
+.task-add-row {
+  display: flex;
+  align-items: center;
+  gap: 0.65em;
+  padding: 0.2em 0.5em;
+}
+.task-add {
+  font-family: var(--sans);
+  font-size: 13px;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  color: var(--faint);
+  padding: 0.3em 0;
+  touch-action: manipulation;
+}
+.task-add:hover { color: var(--accent); }
+.task-add-circle {
+  flex: none;
+  width: 1.35em;
+  height: 1.35em;
+  border: 2px dashed var(--faint);
+  border-radius: 50%;
+}
+.task-add-input {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  color: var(--ink);
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  padding: 0.15em 0;
+  outline: none;
+}
+.task-add-input:focus { border-bottom-color: var(--accent); }
+.task-add-input::placeholder { color: var(--faint); }
 
 /* Unsaved ticks waiting to be written — the accent makes the button read
    as "you have changes", not as one more quiet tool. */
