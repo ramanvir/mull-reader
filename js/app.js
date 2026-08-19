@@ -996,7 +996,128 @@ function setupTaskTools() {
   list.before(strip);
 }
 
+// ---------- Adding checklist items ----------
+// Ticking is easy; adding used to mean opening the source editor. Each
+// outermost checklist now ends in a ghost "+ Add item" row: tap it, type,
+// and Enter appends a real task line to the markdown — same bullet style and
+// indentation as the list's last item, inserted after that item's nested
+// content — saved through the same pipe as ticks. The rows only appear when
+// the checkbox→line mapping was verified, since they navigate by it.
+
+let reopenAdderAt = -1;   // list index whose input reopens after a re-render
+
+function setupTaskAdders() {
+  for (const old of els.content.querySelectorAll('.task-add-row')) old.remove();
+  if (!currentTaskLines) { reopenAdderAt = -1; return; }
+  // Outermost task lists only — one adder per checklist, not one per nesting.
+  const lists = [...els.content.querySelectorAll('ul.task-list')]
+    .filter((ul) => !ul.parentElement.closest('li.task-item'));
+  lists.forEach((ul, listIndex) => {
+    if (!ul.querySelector(':scope > li.task-item')) return;
+    const li = document.createElement('li');
+    li.className = 'task-add-row';
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'task-add';
+    btn.textContent = '+ Add item';
+    btn.addEventListener('click', () => openAdderInput(li, ul, listIndex));
+    li.appendChild(btn);
+    ul.appendChild(li);
+    if (listIndex === reopenAdderAt) openAdderInput(li, ul, listIndex);
+  });
+  reopenAdderAt = -1;
+}
+
+function openAdderInput(li, ul, listIndex) {
+  li.innerHTML = '';
+  const circle = document.createElement('span');
+  circle.className = 'task-add-circle';
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'task-add-input';
+  input.placeholder = 'New item';
+  input.setAttribute('aria-label', 'New checklist item');
+  input.autocapitalize = 'sentences';
+  input.enterKeyHint = 'done';
+  let done = false;
+  const close = () => {
+    if (done) return;
+    done = true;
+    li.innerHTML = '';
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'task-add';
+    btn.textContent = '+ Add item';
+    btn.addEventListener('click', () => openAdderInput(li, ul, listIndex));
+    li.appendChild(btn);
+  };
+  const commit = () => {
+    // Enter commits and the re-render detaches the input, which fires blur —
+    // the flag keeps that from appending the same item twice.
+    if (done) return;
+    const text = input.value.trim().replace(/\s+/g, ' ');
+    if (!text) { close(); return; }
+    done = true;
+    appendTaskItem(ul, listIndex, text);
+  };
+  input.addEventListener('keydown', (e) => {
+    e.stopPropagation();
+    if (e.key === 'Enter') commit();
+    else if (e.key === 'Escape') close();
+  });
+  input.addEventListener('blur', commit);
+  li.append(circle, input);
+  input.focus();
+}
+
+function appendTaskItem(ul, listIndex, text) {
+  // The list's last top-level task anchors everything: its source line gives
+  // the indentation and bullet style, and the insertion point sits after its
+  // block — past nested items and wrapped label lines.
+  const anchors = ul.querySelectorAll(':scope > li.task-item > input[type="checkbox"]');
+  const anchor = anchors[anchors.length - 1];
+  const allBoxes = [...els.content.querySelectorAll('input[type="checkbox"]')];
+  const at = allBoxes.indexOf(anchor);
+  const markerLine = currentTaskLines?.[at];
+  if (at < 0 || markerLine === undefined) { toast('Couldn’t add the item.'); return; }
+
+  const lines = current.text.split('\n');
+  const m = lines[markerLine]?.match(/^(\s*(?:>\s*)*)([-*+]|\d{1,9}([.)]))\s/);
+  if (!m) { toast('Couldn’t add the item.'); return; }
+  const indent = m[1];
+  const marker = /\d/.test(m[2]) ? `${parseInt(m[2], 10) + 1}${m[3]}` : m[2];
+
+  let insertAt = markerLine + 1;
+  while (insertAt < lines.length) {
+    const line = lines[insertAt];
+    if (!line.trim()) break;
+    if ((line.match(/^\s*/)[0].length) <= indent.length) break;
+    insertAt++;
+  }
+  lines.splice(insertAt, 0, `${indent}${marker} [ ] ${text}`);
+  current.text = lines.join('\n');
+  if (typeof current.node.text === 'string') current.node.text = current.text;
+  docDirty = true;
+
+  const snap = current;
+  recordRecent(snap.node, { dirName: tree?.name || '', text: snap.text })
+    .then((list) => { recents = list; renderRecents(); })
+    .catch(() => { /* the in-memory text still has the item */ });
+  saveSnapshot(snap);
+
+  // Re-render so the new row is a real, tickable task — and reopen this
+  // list's input so several items can be added in a row.
+  reopenAdderAt = listIndex;
+  renderCurrentText();
+}
+
+// The verified checkbox→source-line mapping of the current render; null when
+// the document has no checklists or the mapping was unsafe. The add-item rows
+// depend on it the same way ticking does.
+let currentTaskLines = null;
+
 function wireTaskCheckboxes() {
+  currentTaskLines = null;
   const boxes = [...els.content.querySelectorAll('input[type="checkbox"]')];
   if (!boxes.length) return;
   const taskLines = scanTaskLines(current.text);
@@ -1005,6 +1126,7 @@ function wireTaskCheckboxes() {
   // written straight into the markdown — the mapping is unsafe, so the boxes
   // stay read-only rather than risk ticking the wrong line.
   if (taskLines.length !== boxes.length) return;
+  currentTaskLines = taskLines;
   boxes.forEach((box, i) => {
     box.disabled = false;
     box.addEventListener('change', () => toggleTask(taskLines[i], box.checked));
@@ -1200,6 +1322,7 @@ function renderCurrentText() {
   buildToc(els.toc, els.outline, headings);
   wireTaskCheckboxes();
   setupTaskTools();
+  setupTaskAdders();
   updateSaveUi();
   window.scrollTo(0, scrollY);
   setDocTitle(current.name);
@@ -1339,6 +1462,7 @@ async function openNode(node, { keepScroll = false } = {}) {
   buildToc(els.toc, els.outline, headings);
   wireTaskCheckboxes();
   setupTaskTools();
+  setupTaskAdders();
   updateSaveUi();
   // One scroll, set synchronously now that the document is laid out — reading
   // scrollHeight flushes layout, so the fraction lands against the real height
